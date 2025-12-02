@@ -10,7 +10,7 @@ const Register = () => {
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (token) {
-      navigate('/dashboard')
+      navigate('/home')
     }
   }, [navigate])
 
@@ -24,7 +24,7 @@ const Register = () => {
       const data = await api.post('/auth/register', formData)
       localStorage.setItem('token', data.token)
       localStorage.setItem('user', JSON.stringify(data))
-      navigate('/dashboard')
+      navigate('/home')
     } catch (err) {
       setError(err.response?.data?.message || 'Erro ao registrar')
     }

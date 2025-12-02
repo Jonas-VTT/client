@@ -4,7 +4,7 @@ import PrivateRoute from "./routes/PrivateRoute"
 
 import Login from "./routes/Login"
 import Register from "./routes/Register"
-import Main from './routes/Main'
+import Home from './routes/Home'
 
 function App() {
   return (
@@ -13,7 +13,7 @@ function App() {
         <Route path="/" element={<Login />}/>
         <Route path="/registro" element={<Register />}/>
 
-        <Route path="/main" element={<PrivateRoute> <Main/> </PrivateRoute>}/>
+        <Route path="/home" element={<PrivateRoute> <Home/> </PrivateRoute>}/>
       </Routes>
     </BrowserRouter>
   )

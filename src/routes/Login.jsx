@@ -10,7 +10,7 @@ const Login = () => {
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (token) {
-      navigate('/dashboard')
+      navigate('/home')
     }
   }, [navigate])
 
@@ -26,7 +26,7 @@ const Login = () => {
       localStorage.setItem('token', data.token)
       localStorage.setItem('user', JSON.stringify(data))
       
-      navigate('/dashboard')
+      navigate('/home')
     } catch (err) {
       setError(err.response?.data?.message || 'Erro ao conectar no servidor')
     }
@@ -85,7 +85,7 @@ const Login = () => {
 
         <p className="mt-6 text-center text-gray-500 text-sm">
           Ainda não tem credencial?{' '}
-          <Link to="/register" className="text-gray-500 hover:text-gray-400 font-bold">
+          <Link to="/registro" className="text-gray-500 hover:text-gray-400 font-bold">
             Registrar-se
           </Link>
         </p>
