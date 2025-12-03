@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useContext } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { AuthContext } from '../context/authContext'
 import api from '../config/api'
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' })
   const [error, setError] = useState('')
+  
+  const { loginUser } = useContext(AuthContext) 
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -20,11 +23,11 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+
     try {
       const { data } = await api.post('/auth/login', formData)
       
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify(data))
+      loginUser(data, data.token)
       
       navigate('/home')
     } catch (err) {
