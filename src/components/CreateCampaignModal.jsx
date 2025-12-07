@@ -20,8 +20,15 @@ const CreateCampaignModal = ({ onClose, onCreated }) => {
          const payload = {
             title: formData.title,
             system: formData.system,
-            proceduralMapEnabled: formData.proceduralMapEnabled,
-            proceduralMapType: formData.proceduralMapEnabled ? formData.proceduralMapType : null
+            features: {
+
+               proceduralMap: {
+                  enabled: formData.proceduralMapEnabled,
+                  config: {
+                     theme: formData.proceduralMapEnabled ? formData.proceduralMapType : null
+                  }
+               }
+            }
          }
          await api.post('/campaigns', payload)
          
@@ -105,7 +112,7 @@ const CreateCampaignModal = ({ onClose, onCreated }) => {
                         onChange={e => setFormData({ ...formData, proceduralMapType: e.target.value })}
                         className='bg-gray-900 w-full text-white font-bold px-3 py-3 mt-2 border rounded-2xl transition-all hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed'
                      >
-                        <option value="Backrooms">Backrooms (liminal)</option>
+                        <option value="backrooms">Backrooms (liminal)</option>
                      </select>
                   )}
                </div>
