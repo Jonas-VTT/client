@@ -32,6 +32,9 @@ const Home = () => {
       logoutUser()
       navigate('/')
    }
+   const handleEnterCampaign = (campaignId) => {
+      navigate(`/campaign/${campaignId}`)
+   }
 
    return (
       <div className='min-h-screen bg-gray-950 text-white font-sans'>
@@ -82,7 +85,11 @@ const Home = () => {
 
                         <div className='flex justify-between items-center mt-4 pt-4 border-t border-gray-800'>
                            <span className='text-xs text-gray-500'>Mestre: {user?._id == camp.mestre ? 'Você' : camp.mestre}</span>
-                           <button className='text-gray-600 font-bold text-sm hover:underline'>ENTRAR</button>
+                           <button 
+                              onClick={() => handleEnterCampaign(camp._id)}
+                              className='text-gray-600 font-bold text-sm hover:underline'>
+                                 ENTRAR
+                              </button>
                         </div>
                      </div>
                   ))
