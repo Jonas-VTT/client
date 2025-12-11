@@ -6,6 +6,7 @@ import { AuthProvider } from "./context/authContext"
 import Login from "./routes/Login"
 import Register from "./routes/Register"
 import Home from './routes/Home'
+import JoinCampaign from "./routes/JoinCampaign"
 import Campaign from "./routes/Campaign"
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
           <Route path="/registro" element={<Register />}/>
 
           <Route path="/home" element={<PrivateRoute> <Home/> </PrivateRoute>}/>
+          <Route path="/join/:code" element={<JoinCampaign />} />
           <Route path="/campaign/:id" element={<PrivateRoute> <Campaign/> </PrivateRoute>}/>
         </Routes>
       </AuthProvider>

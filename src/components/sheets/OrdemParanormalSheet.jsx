@@ -5,7 +5,7 @@ import api from '../../config/api'
 import { MdKeyboardArrowLeft, MdKeyboardArrowRight, MdKeyboardDoubleArrowLeft, MdKeyboardDoubleArrowRight } from "react-icons/md";
 import {
    FaHeart, FaBrain, FaRunning, FaBug, FaSave, FaTrash, FaPlus, FaChevronUp, FaChevronDown, FaFilter, FaEdit, FaCheck, FaTimes, FaBox, FaSkull,
-   FaWeightHanging, FaCamera, FaCog, FaUserPlus
+   FaWeightHanging, FaCamera, FaCog, FaUserPlus, FaUserTimes
 } from 'react-icons/fa'
 import {
    GiPsychicWaves, GiPistolGun, GiBullets, GiArmorVest, GiBackpack, GiBroadsword, GiCrosshair, GiHealthPotion, GiBookCover, GiHeavyLightning,
@@ -761,8 +761,8 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
    const { user } = useContext(AuthContext)
    const currentUserId = user?.id?.toString()
    const ownerId = character.owner?._id?.toString()
-   const isOwner = currentUserId && ownerId && currentUserId === ownerId
    const isAdmin = user?.role === 'admin'
+   const isOwner = (currentUserId && ownerId && currentUserId === ownerId) || isAdmin
 
    const [abilityFilter, setAbilityFilter] = useState('Todas')
    const [invFilter, setInvFilter] = useState('todos')
@@ -772,6 +772,7 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
    const [editingRitual, setEditingRitual] = useState(null)
    const [dtAtributo, setDtAtributo] = useState('presenca')
    const [selectedPlayerId, setSelectedPlayerId] = useState('')
+   const [shareableUsers, setShareableUsers] = useState([])
 
    const [debugJson, setDebugJson] = useState('')
    const [jsonError, setJsonError] = useState(null)
@@ -790,9 +791,20 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
       p._id !== character.owner?._id &&
       !character.sharedWith.some(shared => shared._id === p._id)
    )
+
    useEffect(() => {
       setCharacter(data)
    }, [data])
+   useEffect(() => {
+      if (tab === 'config') {
+         api.get(`/characters/${character._id}/shareable-users`)
+            .then(res => setShareableUsers(res.data))
+            .catch(error => console.error("Erro ao buscar jogadores:", error))
+      }
+   }, [tab, character._id])
+   useEffect(() => {
+      setDebugJson(JSON.stringify(character, null, 2))
+   }, [character])
 
    const handleUpdate = async (fieldPath, newValue) => {
       try {
@@ -839,9 +851,7 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
       }
    }
 
-   useEffect(() => {
-      setDebugJson(JSON.stringify(character, null, 2))
-   }, [character])
+
    const handleSaveRawJson = async () => {
       try {
          // 1. Tenta converter o texto para objeto (Validação)
@@ -1931,9 +1941,9 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
                                  className="w-full bg-black/30 border border-white/20 rounded p-2 text-white text-xs outline-none focus:border-gray-500"
                               >
                                  <option value="">Selecione um jogador...</option>
-                                 {availablePlayers.map(p => (
+                                 {shareableUsers.map(p => (
                                     <option key={p._id} value={p._id}>
-                                       {p.name} ({p.email})
+                                       {p.username}
                                     </option>
                                  ))}
                               </select>
