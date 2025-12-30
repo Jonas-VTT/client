@@ -1,16 +1,44 @@
-# React + Vite
+# 🎲 RPG VTT - Client (Frontend) 🗺️
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Este é o frontend (interface) do sistema de RPG Virtual Tabletop. Ele fornece as ferramentas visuais para o Mestre e os Jogadores, incluindo o mapa interativo, fichas de personagens e chat.
 
-Currently, two official plugins are available:
+## Tecnologias
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **React** + **Vite** (Framework e Build Tool)
+- **Tailwind CSS** (Estilização)
+- **Konva.js / React-Konva** (Manipulação do Canvas/Mapa)
+- **Socket.io-client** (Comunicação Real-time)
+- **Axios** (Requisições HTTP)
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Pré-requisitos
 
-## Expanding the ESLint configuration
+- [Node.js](https://nodejs.org/en/) (Versão 16 ou superior)
+- O **Server (Backend)** deve estar rodando para que a api e o socket funcionem.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+---
+
+## Instalação
+
+1. **Clone o repositório:**
+   ```
+   git clone [https://github.com/SEU_USUARIO/NOME_DO_REPO_CLIENT.git](https://github.com/SEU_USUARIO/NOME_DO_REPO_CLIENT.git)
+   cd NOME_DO_REPO_CLIENT
+   ```
+   
+2. **Instale as dependências:**
+   ```
+   npm install
+   ```
+---
+
+## Como Rodar
+**Modo de Desenvolvimento**
+Para iniciar a aplicação com Hot Reload (atualização automática):
+   ```
+   git clone [https://github.com/SEU_USUARIO/NOME_DO_REPO_CLIENT.git](https://github.com/SEU_USUARIO/NOME_DO_REPO_CLIENT.git)
+   cd NOME_DO_REPO_CLIENT
+   ```
+
+Acesse no navegador (geralmente): http://localhost:5173
