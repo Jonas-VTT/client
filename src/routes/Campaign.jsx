@@ -1,46 +1,102 @@
-import { useEffect, useState, useContext } from 'react'
+// --- Core & Libs ---
+import { useEffect, useState, useContext, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import api from '../config/api'
 import { io } from 'socket.io-client'
+
+// --- Config & Context ---
+import api from '../config/api'
 import { AuthContext } from '../context/authContext'
 
-import DraggableWindow from '../components/DraggableWindow'
-import SheetManager from '../components/sheets/SheetManager'
-import SceneManager from '../components/scenes/SceneManager'
-import GameStage from '../components/scenes/GameStage'
+// ---------------------------------------
 
+// --- Scenes & Game ---
+import GameStage from '../components/scenes/GameStage'
+import SceneManager from '../components/scenes/SceneManager'
+
+// --- UI & Tools ---
+import Toolbar from '../components/Toolbar'
+import LayerSidebar from '../components/LayerSidebar'
+import LibraryTab from '../components/sidebar/LibraryTab'
+import AssetBrowser from '../components/assets/AssetBrowser'
+
+// --- Windows & Sheets ---
+import DraggableWindow from '../components/DraggableWindow'
+import DocumentEditor from '../components/sheets/DocumentEditor'
+import SheetManager from '../components/sheets/SheetManager'
+
+// ---------------------------------------
+
+// --- Icons ---
 import { IoChatbubblesSharp } from "react-icons/io5"
 import { FaBookQuran, FaImages } from "react-icons/fa6"
-import { FaCog, FaCopy, FaSync, FaUserPlus, FaChevronLeft, FaChevronRight } from "react-icons/fa"
+import { FaCog, FaCopy, FaSync, FaUserPlus, FaChevronLeft, FaChevronRight, FaBroadcastTower } from "react-icons/fa"
+
+// ---------------------------------------
 
 const Campaign = () => {
-   const [socket, setSocket] = useState(null)
+   // --- Hooks & Refs Essenciais ---
    const { id: campaignId } = useParams()
    const { user } = useContext(AuthContext)
+   const socketRef = useRef(null)
+
+   // --- Dados da Campanha & Socket ---
+   const [socket, setSocket] = useState(null)
    const [campaign, setCampaign] = useState(null)
+   const [loading, setLoading] = useState(true)
+   const [error, setError] = useState('')
+   const [inviteCode, setInviteCode] = useState('')
+   const [viewingScene, setViewingScene] = useState(null)
+
+   // ---- Variáveis Derivadas (Helpers) ---
    const mestreId = (campaign?.mestre?._id || campaign?.mestre)?.toString()
    const userId = (user?._id || user?.id)?.toString()
    const isMaster = mestreId && userId && mestreId === userId
-
-   const [loading, setLoading] = useState(true)
-   const [error, setError] = useState('')
-   const [activeTab, setActiveTab] = useState('chat')
-   const [activeTool, setActiveTool] = useState('select')
-   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
-
-   const [myCharacters, setMyCharacters] = useState([])
-   const [openWindows, setOpenWindows] = useState([])
-   const [topZIndex, setTopZIndex] = useState(100)
-   const [inviteCode, setInviteCode] = useState('')
-
-   const [isSceneManagerOpen, setIsSceneManagerOpen] = useState(false)
    const sceneType = campaign?.activeScene?.type
+   const isPreviewing = isMaster && viewingScene && campaign?.activeScene && viewingScene._id !== campaign.activeScene._id
+
+   // --- Interface (Layout & Tabs) ---
+   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+   const [activeTab, setActiveTab] = useState('chat')
+
+   // --- Ferramentas de Jogo & Cena ---
+   const [activeTool, setActiveTool] = useState('select')
+   const [activeLayer, setActiveLayer] = useState('token')
+   const [isSyncing, setIsSyncing] = useState(false)
+   const [isSceneManagerOpen, setIsSceneManagerOpen] = useState(false)
+   const [objectDrawing, setObjectDrawing] = useState({
+      active: false,
+      texture: null,
+      type: null,
+      shape: 'poly',
+      snap: true,
+      strokeWidth: 20
+   })
+
+   // --- Sistema de Janelas (Fichas) ---
+   const [openWindows, setOpenWindows] = useState([])
+   const [myCharacters, setMyCharacters] = useState([])
+   const [topZIndex, setTopZIndex] = useState(100)
+
+   // --- Galeria & Assets ---
+   const [libraryFolders, setLibraryFolders] = useState([])
+   const [libraryItems, setLibraryItems] = useState([])
+   const [isFullGalleryOpen, setIsFullGalleryOpen] = useState(false)
+   const [isQuickGalleryOpen, setIsQuickGalleryOpen] = useState(false)
+   const [assetVersion, setAssetVersion] = useState(0)
+   const triggerAssetUpdate = () => setAssetVersion(prev => prev + 1)
 
    useEffect(() => {
       setActiveTool('select')
-   }, [campaign?.activeScene?._id])
+   }, [viewingScene])
    useEffect(() => {
-      const newSocket = io('http://localhost:3000')
+      const baseUrl = import.meta.env.DEV ? 'http://localhost:3000' : window.location.origin
+
+      const newSocket = io(baseUrl, {
+         transports: ['websocket', 'polling'],
+         reconnection: true,
+         withCredentials: true
+      })
+      socketRef.current = newSocket
       setSocket(newSocket)
 
       newSocket.emit('join_campaign', campaignId)
@@ -49,21 +105,46 @@ const Campaign = () => {
             ...prev,
             activeScene: newScene
          }))
+
+         if (!isMaster) {
+            setViewingScene(newScene)
+         }
+         else {
+            setViewingScene(prev => prev?._id === newScene._id ? newScene : prev)
+         }
+      })
+      newSocket.on('character_updated', (updatedChar) => {
+         setMyCharacters(prev => prev.map(c => c._id === updatedChar._id ? updatedChar : c))
+         setLibraryItems(prev => prev.map(i => i._id === updatedChar._id ? updatedChar : i))
+         setOpenWindows(prev => prev.map(w =>
+            w.id === updatedChar._id ? { ...w, data: updatedChar, title: updatedChar.name } : w
+         ))
+         console.log(openWindows)
+      })
+      newSocket.on('force_view', (viewData) => {
+         window.dispatchEvent(new CustomEvent('map_force_view', { detail: viewData }))
+      })
+      newSocket.on('sync_view', (viewData) => {
+         window.dispatchEvent(new CustomEvent('map_sync_view', { detail: viewData }))
       })
 
       return () => {
+         newSocket.offAny()
          newSocket.disconnect()
       }
-   }, [campaignId])
+      socketRef.current = null
+   }, [campaignId, isMaster])
    useEffect(() => {
       fetchCampaign()
       fetchMyCharacters()
+      fetchLibrary()
    }, [campaignId])
 
    const fetchCampaign = async () => {
       try {
          const { data } = await api.get(`/campaigns/${campaignId}`)
          setCampaign(data)
+         setViewingScene(data.activeScene)
       }
       catch (error) {
          console.error('Erro ao buscar campanha', error)
@@ -90,6 +171,16 @@ const Campaign = () => {
          const { data } = await api.get(`/campaigns/${campaignId}/invite`)
          setInviteCode(data.inviteCode)
       } catch (err) { console.error(err) }
+   }
+   const fetchLibrary = async () => {
+      try {
+         const { data } = await api.get(`/library/${campaignId}`)
+         setLibraryFolders(data.folders)
+         setLibraryItems(data.items)
+      }
+      catch (error) {
+         console.error("Erro library:", error)
+      }
    }
 
    const openWindow = (character) => {
@@ -125,21 +216,83 @@ const Campaign = () => {
       alert("Link copiado! Mande para seus jogadores.")
    }
 
-   const handleCreateCharacter = async () => {
+   const handleCreateLibraryItem = async (type, folderId) => {
       try {
-         const { data: newChar } = await api.post('/characters', { campaignId })
-         setMyCharacters([...myCharacters, newChar])
-         openWindow(newChar)
+         // --- CRIAR PASTA ---
+         if (type === 'folder') {
+            const name = prompt("Nome da nova pasta:")
+            if (!name) return
+
+            await api.post('/library/folders', {
+               name,
+               campaign: campaignId,
+               parent: folderId
+            })
+         }
+         // --- CRIAR ITEM (PC, NPC, DOC) ---
+         else {
+            // Usa a rota de characters, mas passando TYPE e FOLDER
+            const payload = {
+               campaignId,
+               name: `Novo ${type.toUpperCase()}`,
+               type: type,      // 'pc', 'npc', 'doc'
+               folder: folderId // ID da pasta ou null
+            }
+
+            const { data: newItem } = await api.post('/characters', payload)
+
+            // Abre a janela imediatamente
+            openWindow(newItem)
+         }
+
+         // Atualiza a lista visualmente
+         fetchLibrary()
+
+      } catch (error) {
+         console.error("Erro ao criar:", error)
+         alert("Erro ao criar item.")
       }
-      catch (error) {
-         setError('Erro ao criar personagem novo')
-         console.error('Erro ao criar:', error)
+   }
+   const handleMoveLibraryItem = async (itemId, itemType, targetFolderId) => {
+      try {
+         // Se arrastou um ARQUIVO (Personagem/Doc)
+         if (itemType === 'file') {
+            await api.put(`/characters/${itemId}`, { folder: targetFolderId })
+         }
+         // Se arrastou uma PASTA
+         else {
+            await api.put(`/library/folders/${itemId}`, { parent: targetFolderId })
+         }
+
+         // Atualiza a lista imediatamente
+         fetchLibrary()
+      } catch (error) {
+         console.error("Erro ao mover:", error)
+      }
+   }
+   const handleDeleteLibraryItem = async (itemId, type) => {
+      try {
+         closeWindow(itemId)
+
+         if (type === 'folder') {
+            await api.delete(`/library/folders/${itemId}`)
+         } else {
+            await api.delete(`/characters/${itemId}`)
+         }
+
+         fetchLibrary()
+      } catch (error) {
+         console.error("Erro ao deletar:", error)
+         alert("Erro ao deletar item.")
       }
    }
    const handleSheetUpdate = (updatedChar) => {
-      setMyCharacters(prev => prev.map(c => c._id === updatedChar._id ? updatedChar : c))
+      let updatedCharactersList = prev => prev.map(c => c._id === updatedChar._id ? updatedChar : c)
+
+      setMyCharacters(updatedCharactersList)
+      setLibraryItems(updatedCharactersList)
       setOpenWindows(prev => prev.map(w =>
-         w.id === updatedChar._id ? { ...w, data: updatedChar } : w
+         w.id === updatedChar._id ? { ...w, data: updatedChar, title: updatedChar.name } : w
       ))
    }
    const handleActivateScene = async (sceneId) => {
@@ -167,16 +320,11 @@ const Campaign = () => {
       }
    }
    const handleSceneUpdate = (updatedScene) => {
-      setCampaign(prev => ({
-         ...prev,
-         activeScene: updatedScene
-      }))
+      setViewingScene(updatedScene)
 
-      if (socket) {
-         socket.emit('gm_change_scene', {
-            campaignId,
-            scene: updatedScene
-         })
+      if (campaign?.activeScene?._id === updatedScene._id) {
+         setCampaign(prev => ({ ...prev, activeScene: updatedScene }))
+         if (socket) socket.emit('gm_change_scene', { campaignId, scene: updatedScene })
       }
    }
    const handleSheetDelete = (deletedCharId) => {
@@ -190,74 +338,38 @@ const Campaign = () => {
          setInviteCode(data.inviteCode)
       } catch (err) { alert("Erro ao renovar") }
    }
+   const handlePreviewScene = async (sceneId) => {
+      console.log("Tentando carregar preview da cena ID:", sceneId)
+      if (!sceneId) return console.error("ID da cena inválido")
+      try {
+         const { data: sceneData } = await api.get(`/scenes/${sceneId}`)
+         console.log("Dados recebidos da API:", sceneData)
+         if (typeof sceneData === 'string' && sceneData.startsWith('<!doctype html>')) {
+            console.error("ERRO CRÍTICO: A rota /api/scenes/:id não existe ou falhou.")
+            return
+         }
+         setViewingScene(sceneData)
+         setIsSceneManagerOpen(false)
+      } catch (error) { console.error("Erro ao carregar preview:", error) }
+   }
+   const handleBroadcastScene = async () => {
+      if (!viewingScene) return
 
-   const renderToolbar = () => {
-      return (
-         <div className="absolute top-0 left-0 w-full h-12 flex items-center justify-center gap-4 px-4 mt-5 z-40 pointer-events-none">
-            <div className="flex gap-4 pointer-events-auto transition-all duration-300">
+      try {
+         console.log(viewingScene)
+         const { data: updatedScene } = await api.put(`/scenes/${viewingScene._id}/activate`, {
+            campaignId: campaignId
+         })
 
-               {/* --- FERRAMENTAS DE MAPA */}
-               {sceneType === 'map' && (
-                  <>
-                     <button
-                        onClick={() => setActiveTool('select')}
-                        title="Selecionar"
-                        className={`text-xl p-3 rounded transition-all cursor-pointer shadow-lg border border-white/10 hover:scale-105
-                           ${activeTool === 'select' ? 'bg-gray-600 text-white' : 'bg-gray-600/40 text-gray-400 hover:bg-gray-500/40'}
-                        `}
-                     >
-                        👆
-                     </button>
+         if (socket) {
+            socket.emit('gm_change_scene', {
+               campaignId,
+               scene: updatedScene
+            })
+         }
 
-                     <button
-                        onClick={() => setActiveTool('ruler')}
-                        title="Régua (Medir Distância)"
-                        className={`text-xl p-3 rounded transition-all cursor-pointer shadow-lg border border-white/10 hover:scale-105
-                           ${activeTool === 'ruler' ? 'bg-gray-600 text-white' : 'bg-gray-600/40 text-gray-400 hover:bg-gray-500/40'}
-                        `}
-                     >
-                        📏
-                     </button>
-
-                     <button
-                        onClick={() => setActiveTool('draw')}
-                        title="Desenhar"
-                        className={`text-xl p-3 rounded transition-all cursor-pointer shadow-lg border border-white/10 hover:scale-105
-                           ${activeTool === 'draw' ? 'bg-gray-600 text-white' : 'bg-gray-600/40 text-gray-400 hover:bg-gray-700/40'}
-                        `}
-                     >
-                        ✏️
-                     </button>
-                  </>
-               )}
-
-               {/* --- FERRAMENTAS DE BACKGROUND --- */}
-               {sceneType === 'background' && (
-                  <></>
-               )}
-
-               {/* --- FERRAMENTAS DE CUTSCENE --- */}
-               {sceneType === 'cutscene' && (
-                  <></>
-               )}
-
-               {isMaster && sceneType === 'map' && (<div className='bg-white/20 w-px h-auto mx-2'></div>)}
-
-               {/* --- CONTROLES DO MESTRE --- */}
-               {isMaster && (
-                  <>
-                     <button
-                        onClick={() => setIsSceneManagerOpen(true)}
-                        title='Gerenciar Cenas'
-                        className='bg-gray-600/40 text-xl text-white flex items-center justify-center p-3 px-4 border border-white/10 rounded transition-all cursor-pointer hover:bg-gray-500/40 hover:scale-105 shadow-lg animate-fade-in'
-                     >
-                        <FaImages />
-                     </button>
-                  </>
-               )}
-            </div>
-         </div>
-      )
+         setCampaign(prev => ({ ...prev, activeScene: updatedScene }))
+      } catch (error) { console.error("Erro ao transmitir cena:", error) }
    }
 
    return (
@@ -269,18 +381,65 @@ const Campaign = () => {
                socket={socket}
                user={user}
                campaignId={campaignId}
-               activeScene={campaign?.activeScene}
+               activeScene={viewingScene}
                onSceneUpdate={handleSceneUpdate}
                onActivateScene={handleActivateScene}
                isMaster={isMaster}
                isSidebarOpen={isSidebarOpen}
+               activeTool={activeTool}
+               isSyncing={isSyncing}
+               objectDrawing={objectDrawing}
+               activeLayer={activeLayer}
             />
          </div>
 
+         {isPreviewing && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 animate-bounce-in">
+               <div className="bg-red-900/90 border border-red-500 text-white px-6 py-2 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.5)] flex items-center gap-4">
+                  <div className="flex flex-col">
+                     <span className="text-[10px] font-bold text-red-300 uppercase tracking-widest">Modo Preview</span>
+                     <span className="text-xs font-bold">Editando: {viewingScene.name}</span>
+                  </div>
+
+                  <button
+                     onClick={handleBroadcastScene}
+                     className="bg-white text-red-900 hover:bg-gray-200 px-4 py-1.5 rounded-full text-xs font-bold uppercase flex items-center gap-2 transition-transform hover:scale-105 active:scale-95 shadow-lg"
+                  >
+                     <FaBroadcastTower /> Transmitir
+                  </button>
+               </div>
+            </div>
+         )}
+
          {/*FERRAMENTAS*/}
          <div className="w-full h-12 flex items-center justify-center gap-4 px-4 mt-5 z-40">
-            {renderToolbar()}
+            <Toolbar
+               activeTool={activeTool}
+               onSelectTool={setActiveTool}
+               isMaster={isMaster}
+               campaignId={campaignId}
+
+               onOpenScenes={() => setIsSceneManagerOpen(true)}
+
+               isSyncing={isSyncing}
+               onToggleSync={() => setIsSyncing(!isSyncing)}
+               objectDrawing={objectDrawing}
+               setObjectDrawing={setObjectDrawing}
+               activeLayer={activeLayer}
+               setActiveLayer={setActiveLayer}
+
+               onOpenFullGallery={() => setIsFullGalleryOpen(true)}
+               assetVersion={assetVersion}
+            />
          </div>
+
+         {/* BARRA DE CAMADAS */}
+         {isMaster && (
+            <LayerSidebar
+               activeLayer={activeLayer}
+               setActiveLayer={setActiveLayer}
+            />
+         )}
 
          {/*SIDEBAR*/}
          <div
@@ -325,7 +484,7 @@ const Campaign = () => {
                      </button>
                   </div>
 
-                  <div className='flex-1 overflow-y-auto p-4 custom-scrollbar'>
+                  <div className='flex-1 overflow-y-auto custom-scrollbar'>
                      {activeTab === 'chat' && (
                         <div className="text-gray-500 text-center mt-10">
                            Chat desconectado.
@@ -333,43 +492,16 @@ const Campaign = () => {
                      )}
 
                      {activeTab === 'sheets' && (
-                        <div className="flex flex-col gap-4">
-                           <button
-                              onClick={handleCreateCharacter}
-                              className='w-full bg-gray-600 text-white font-bold py-2 rounded transition-all cursor-pointer hover:bg-gray-500'
-                           >
-                              + Novo Personagem
-                           </button>
-
-                           <div className='space-y-2'>
-                              <p className='text-xs text-gray-500 font-bold uppercase tracking-wider'>Meus personagens</p>
-                              {myCharacters.length === 0 && <p className="text-sm text-gray-600 italic">Nenhum personagem.</p>}
-
-                              {myCharacters.map(char => (
-                                 <div
-                                    key={char._id}
-                                    draggable="true"
-                                    onDragStart={(e) => {
-                                       e.dataTransfer.setData('type', 'token')
-                                       e.dataTransfer.setData('character', JSON.stringify(char))
-                                    }}
-                                    onClick={() => openWindow(char)}
-                                    className="bg-gray-800/50 flex items-center gap-3 p-2 border border-transparent rounded cursor-pointer transition-all hover:bg-gray-800 hover:border-gray-600 group"
-                                 >
-                                    <div className="bg-gray-700 w-10 h-10 overflow-hidden shrink-0 border border-gray-600 rounded-full ">
-                                       {char.imageUrl ? (
-                                          <img src={char.imageUrl} alt={char.name} className="w-full h-full object-cover" />
-                                       ) : (
-                                          <div className="w-full h-full text-gray-500 text-xs flex items-center justify-center">?</div>
-                                       )}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                       <p className="text-gray-200 font-medium truncate group-hover:text-gray-300">{char.name}</p>
-                                    </div>
-                                 </div>
-                              ))}
-                           </div>
-                        </div>
+                        <LibraryTab
+                           items={libraryItems}
+                           folders={libraryFolders}
+                           onOpen={(item) => openWindow(item)}
+                           onCreate={handleCreateLibraryItem}
+                           onMove={handleMoveLibraryItem}
+                           onDelete={handleDeleteLibraryItem}
+                           isMaster={isMaster}
+                           user={user}
+                        />
                      )}
 
                      {activeTab === 'settings' && (
@@ -431,7 +563,14 @@ const Campaign = () => {
                onFocus={() => bringToFront(win.id)}
                initialPos={{ x: 100 + (openWindows.length * 20), y: (openWindows.length * 20) - 8 }}
             >
-               {win.type === 'sheet' && (
+               {win.data.type === 'doc' && (
+                  <DocumentEditor
+                     data={win.data}
+                     onUpdate={handleSheetUpdate}
+                  />
+               )}
+
+               {(['pc', 'npc', 'structure'].includes(win.data.type) || !win.data.type) && (
                   <SheetManager
                      character={win.data}
                      system="ordem-paranormal"
@@ -443,13 +582,27 @@ const Campaign = () => {
             </DraggableWindow>
          ))}
 
-         {/*JANELA MANEJAMENTO DE CENAS*/}
+         {/*JANELAS MANEJAMENTO*/}
          {isSceneManagerOpen && (
             <SceneManager
                campaignId={campaignId}
                onClose={() => setIsSceneManagerOpen(false)}
-               onActivateScene={handleActivateScene}
+               onActivateScene={handlePreviewScene}
+               onUpdateScene={handleSceneUpdate}
             />
+         )}
+         {isFullGalleryOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+               <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsFullGalleryOpen(false)} />
+
+               <div className="relative w-full max-w-6xl h-[85vh] z-50 shadow-2xl animate-fade-in">
+                  <AssetBrowser
+                     campaignId={campaignId}
+                     onClose={() => setIsFullGalleryOpen(false)}
+                     onAssetUpdate={triggerAssetUpdate}
+                  />
+               </div>
+            </div>
          )}
       </div>
    )

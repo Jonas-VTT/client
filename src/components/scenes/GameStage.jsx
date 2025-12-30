@@ -9,7 +9,7 @@ const isVideoFile = (url) => {
   return url.match(/\.(mp4|webm|ogg|mov)$/i)
 }
 
-const GameStage = ({ activeScene, onActivateScene, onSceneUpdate, isMaster, socket, campaignId, isSidebarOpen }) => {
+const GameStage = ({ activeScene, onActivateScene, onSceneUpdate, isMaster, socket, campaignId, isSidebarOpen, activeTool, isSyncing, objectDrawing, activeLayer }) => {
   const [isDragging, setIsDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef(null)
@@ -35,7 +35,6 @@ const GameStage = ({ activeScene, onActivateScene, onSceneUpdate, isMaster, sock
       setVideoOpacity(1)
     }
   }, [activeScene?._id])
-
   useEffect(() => {
     if (isMaster && activeScene?.type === 'cutscene') {
       Promise.all([
@@ -47,7 +46,6 @@ const GameStage = ({ activeScene, onActivateScene, onSceneUpdate, isMaster, sock
       })
     }
   }, [isMaster, activeScene, campaignId])
-
   useEffect(() => {
     if (!socket) return
 
@@ -77,8 +75,18 @@ const GameStage = ({ activeScene, onActivateScene, onSceneUpdate, isMaster, sock
     }
 
     socket.on('media_command_received', handleMediaCommand)
+    
     return () => socket.off('media_command_received', handleMediaCommand)
   }, [socket])
+
+  const getCleanUrl = (url) => {
+    if (!url) return '';
+    // Remove o localhost para o navegador usar o dominio atual (ngrok)
+    if (url.includes('localhost:3000')) {
+      return url.replace('http://localhost:3000', '').replace('https://localhost:3000', '');
+    }
+    return url;
+  }
 
   const handleUpload = async (file) => {
     if (!isMaster) return
@@ -90,7 +98,13 @@ const GameStage = ({ activeScene, onActivateScene, onSceneUpdate, isMaster, sock
       formData.append('file', file)
 
       const folderType = file.type.startsWith('video/') ? 'videos' : 'images'
-      const { data: uploadData } = await api.post(`/upload/${folderType}`, formData)
+      const { data: uploadData } = await api.post(`/upload/${folderType}`, formData, {
+        timeout: 0,
+        onUploadProgress: (progressEvent) => { //console.log (retirar depois)
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          console.log(`Upload: ${percent}%`);
+        }
+      })
 
       const { data: updatedScene } = await api.put(`/scenes/${activeScene._id}`, {
         media: {
@@ -248,7 +262,7 @@ const GameStage = ({ activeScene, onActivateScene, onSceneUpdate, isMaster, sock
         <video
           key={activeScene._id}
           ref={videoRef}
-          src={activeScene.media.url}
+          src={getCleanUrl(activeScene.videoUrl || activeScene.content)}
           className="w-full h-full object-cover transition-opacity duration-1500 ease-in-out" // TRANSITION SMOOTHIE
           style={{ opacity: videoOpacity }}
           muted={isMuted}
@@ -349,6 +363,10 @@ const GameStage = ({ activeScene, onActivateScene, onSceneUpdate, isMaster, sock
         socket={socket}
         onUpdateScene={onSceneUpdate}
         isSidebarOpen={isSidebarOpen}
+        activeTool={activeTool}
+        isSyncing={isSyncing}
+        objectDrawing={objectDrawing}
+        activeLayer={activeLayer}
       />
     )
   }

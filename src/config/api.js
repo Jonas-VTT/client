@@ -1,7 +1,9 @@
 import axios from 'axios'
 
+const isDev = import.meta.env.DEV
+
 const api = axios.create({
-   baseURL: 'http://localhost:3000/api',
+   baseURL: isDev ? 'http://localhost:3000/api' : '/api',
 })
 
 api.interceptors.request.use((config) => {

@@ -12,18 +12,19 @@ const EditableInput = ({
    const [value, setValue] = useState(initialValue)
 
    useEffect(() => {
-      setValue(initialValue)
+      setValue(initialValue || '')
    }, [initialValue])
 
    const handleChange = (e) => {
-      const newValue = e.target.value
-      setValue(newValue)
-
-      if (type === 'number' && newValue === '') {
-         return
+      setValue(e.target.value)
+   }
+   const handleBlur = () => {
+      if (value != initialValue) {
+         onSave(value)
       }
-
-      onSave(newValue)
+   }
+   const handleKeyDown = (e) => {
+      if (e.key === 'Enter') e.target.blur()
    }
 
    return (
@@ -34,6 +35,8 @@ const EditableInput = ({
             min={min}
             max={max}
             onChange={handleChange}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
             onMouseDown={(e) => e.stopPropagation()}
             placeholder={placeholder}
             className={`bg-transparent border-none outline-none focus:ring-0 p-0 m-0 w-full font-inherit ${className}`}

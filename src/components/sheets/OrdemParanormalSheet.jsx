@@ -15,6 +15,7 @@ import { LuShield, LuSword } from "react-icons/lu"
 
 
 import EditableInput from '../EditableInput'
+
 const AttrValue = ({ value, top, left, onSave }) => (
    <div
       className="absolute w-12 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center z-10"
@@ -28,6 +29,31 @@ const AttrValue = ({ value, top, left, onSave }) => (
       />
    </div>
 )
+const AutoSaveTextarea = ({ value, onSave, className, placeholder }) => {
+   const [localValue, setLocalValue] = useState(value || '')
+   useEffect(() => {
+      setLocalValue(value || '')
+   }, [value])
+
+   const handleChange = (e) => setLocalValue(e.target.value)
+   
+   const handleBlur = () => {
+      // Só chama a API se o valor realmente mudou
+      if (localValue !== value) {
+         onSave(localValue)
+      }
+   }
+
+   return (
+      <textarea
+         value={localValue}
+         onChange={handleChange}
+         onBlur={handleBlur}
+         className={className}
+         placeholder={placeholder}
+      />
+   )
+}
 const RichTextDisplay = ({ text }) => {
    if (!text) return null
 
@@ -854,10 +880,8 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
 
    const handleSaveRawJson = async () => {
       try {
-         // 1. Tenta converter o texto para objeto (Validação)
          const parsedData = JSON.parse(debugJson)
 
-         // 2. Remove campos sensíveis que não devem ser alterados na mão
          delete parsedData._id
          delete parsedData.createdAt
          delete parsedData.updatedAt
@@ -865,10 +889,8 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
          delete parsedData.owner
          delete parsedData.campaign
 
-         // 3. Envia para o backend (Atualiza TUDO o que sobrou)
          const { data: savedChar } = await api.put(`/characters/${character._id}`, parsedData)
 
-         // 4. Atualiza estado local
          setCharacter(savedChar)
          setJsonError(null)
          if (onUpdate) onUpdate(savedChar)
@@ -900,7 +922,7 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
                   <div className='flex mb-2'>
                      <span className="bg-black/20 text-xl font-bold uppercase tracking-wider truncate leading-tight flex items-center">
                         <EditableInput
-                           value={data.name}
+                           value={character.name}
                            className="bg-transparent font-bold px-2"
                            onSave={(val) => handleUpdate('name', val)}
                         />
@@ -1846,9 +1868,9 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
 
                      {/* TOKEN (Clicável para Upload) */}
                      <div className="relative group cursor-pointer w-40 h-40 shrink-0">
-                        <div className="w-full h-full overflow-hiddenshadow-2xl relative">
+                        <div className="w-full h-full overflow-hidden shadow-2xl relative bg-black border-2 border-gray-700 rounded-lg">
                            {character.imageUrl ? (
-                              <img src={character.imageUrl} className="w-full h-full object-contain" alt="Token" />
+                              <img src={character.imageUrl} className="w-full h-full object-cover" alt="Token" />
                            ) : (
                               <div className="w-full h-full flex items-center justify-center text-gray-700 bg-gray-900 text-4xl">?</div>
                            )}
@@ -1869,28 +1891,28 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
                         />
                      </div>
 
-                     {/* APARÊNCIA E PERSONALIDADE (Lado a lado do token) */}
+                     {/* APARÊNCIA (CORRIGIDO) */}
                      <div className="flex-1 w-full space-y-4">
                         <div>
                            <h3 className="text-xs font-bold text-gray-500 uppercase mb-1">Aparência</h3>
-                           <textarea
-                              value={sheet.detalhes?.aparencia || ''}
-                              onChange={(e) => handleUpdate('sheet.detalhes.aparencia', e.target.value)}
-                              className="w-full h-24 bg-black/30 border border-white/10 rounded p-3 text-sm text-gray-300 outline-none focus:border-gray-500 resize-none custom-scrollbar"
+                           <AutoSaveTextarea
+                              value={sheet.detalhes?.aparencia}
+                              onSave={(val) => handleUpdate('sheet.detalhes.aparencia', val)}
+                              className="w-full h-32 bg-black/30 border border-white/10 rounded p-3 text-sm text-gray-300 outline-none focus:border-gray-500 resize-none custom-scrollbar"
                               placeholder="Descreva como seu personagem se parece..."
                            />
                         </div>
                      </div>
                   </div>
 
-                  {/* 2. CAMPOS DE TEXTO GRANDE (Histórico, Personalidade, Objetivo) */}
+                  {/* 2. CAMPOS DE TEXTO GRANDE (Histórico, Personalidade, Objetivo) - CORRIGIDOS */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 min-h-0">
 
                      <div className="flex flex-col h-full">
                         <h3 className="text-xs font-bold text-gray-500 uppercase mb-1">Personalidade</h3>
-                        <textarea
-                           value={sheet.detalhes?.personalidade || ''}
-                           onChange={(e) => handleUpdate('sheet.detalhes.personalidade', e.target.value)}
+                        <AutoSaveTextarea
+                           value={sheet.detalhes?.personalidade}
+                           onSave={(val) => handleUpdate('sheet.detalhes.personalidade', val)}
                            className="w-full flex-1 bg-white/5 border border-white/10 rounded p-4 text-sm text-gray-300 outline-none focus:border-gray-500 resize-none custom-scrollbar min-h-[150px]"
                            placeholder="Traços de personalidade, medos, manias..."
                         />
@@ -1898,9 +1920,9 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
 
                      <div className="flex flex-col h-full">
                         <h3 className="text-xs font-bold text-gray-500 uppercase mb-1">Objetivo</h3>
-                        <textarea
-                           value={sheet.detalhes?.objetivo || ''}
-                           onChange={(e) => handleUpdate('sheet.detalhes.objetivo', e.target.value)}
+                        <AutoSaveTextarea
+                           value={sheet.detalhes?.objetivo}
+                           onSave={(val) => handleUpdate('sheet.detalhes.objetivo', val)}
                            className="w-full flex-1 bg-white/5 border border-white/10 rounded p-4 text-sm text-gray-300 outline-none focus:border-gray-500 resize-none custom-scrollbar min-h-[150px]"
                            placeholder="O que seu personagem busca?"
                         />
@@ -1908,9 +1930,9 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
 
                      <div className="col-span-1 md:col-span-2 flex flex-col">
                         <h3 className="text-xs font-bold text-gray-500 uppercase mb-1">Histórico</h3>
-                        <textarea
-                           value={sheet.detalhes?.historico || ''}
-                           onChange={(e) => handleUpdate('sheet.detalhes.historico', e.target.value)}
+                        <AutoSaveTextarea
+                           value={sheet.detalhes?.historico}
+                           onSave={(val) => handleUpdate('sheet.detalhes.historico', val)}
                            className="w-full flex-1 bg-white/5 border border-white/10 rounded p-4 text-sm text-gray-300 outline-none focus:border-gray-500 resize-none custom-scrollbar min-h-[200px]"
                            placeholder="A história da vida do seu personagem..."
                         />
@@ -2071,7 +2093,7 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
                      value={debugJson}
                      onChange={(e) => {
                         setDebugJson(e.target.value)
-                        setJsonError(null) // Limpa erro ao digitar
+                        setJsonError(null)
                      }}
                      spellCheck="false"
                   />

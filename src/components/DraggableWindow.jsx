@@ -80,7 +80,7 @@ const DraggableWindow = ({ title, onClose, children, initialPos = { x: 50, y: 50
          </div>
 
          {!isMinimized && (
-            <div className='relative h-full text-white flex-1 overflow-hidden pb-10 custom-scrollbar'>{children}</div>
+            <div className='relative h-full text-white flex-1 overflow-scroll pb-10 custom-scrollbar'>{children}</div>
          )}
       </Rnd>
    )

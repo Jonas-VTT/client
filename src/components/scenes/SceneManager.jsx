@@ -6,7 +6,7 @@ import {
 } from 'react-icons/fa'
 import { PiSelectionBackgroundFill } from "react-icons/pi"
 
-const SceneManager = ({ campaignId, onClose, onActivateScene }) => {
+const SceneManager = ({ campaignId, onClose, onActivateScene, onUpdateScene }) => {
    const [scenes, setScenes] = useState([])
    const [folders, setFolders] = useState([])
    const [currentFolder, setCurrentFolder] = useState(null)
@@ -109,34 +109,43 @@ const SceneManager = ({ campaignId, onClose, onActivateScene }) => {
 
    const renderConfigPanel = () => {
       if (!editingScene) return null
-      const updateEdit = (field, value) => {
+
+      const updateEdit = (path, value) => {
          setEditingScene(prev => {
             const newState = { ...prev }
+            const keys = path.split('.')
+            let currentLevel = newState
 
-            // Se for config do mapa (ex: "mapConfig.gridEnabled")
-            if (field.startsWith('mapConfig.')) {
-               const key = field.split('.')[1]
-               // Garante que mapConfig existe
-               if (!newState.mapConfig) newState.mapConfig = {}
-               newState.mapConfig[key] = value
-            } else {
-               // Campo raiz (ex: "name")
-               newState[field] = value
+            for (let i = 0; i < keys.length - 1; i++) {
+               const key = keys[i]
+               currentLevel[key] = { ...currentLevel[key] }
+               currentLevel = currentLevel[key]
             }
+
+            const lastKey = keys[keys.length - 1]
+            currentLevel[lastKey] = value
+            
             return newState
          })
       }
 
-      // Salva no Banco de Dados
       const handleSaveConfig = async () => {
          try {
-            await api.put(`/scenes/${editingScene._id}`, {
+            const payload = {
                name: editingScene.name,
-               mapConfig: editingScene.mapConfig
-            })
-            setEditingScene(null) // Fecha o painel
-            fetchData() // Recarrega a lista para ver mudanças (ex: nome)
-         } catch (error) {
+               mapConfig: editingScene.mapConfig || {}
+            }
+
+            const { data: updatedScene } = await api.put(`/scenes/${editingScene._id}`, payload)
+
+            setEditingScene(null)
+            fetchData()
+
+            if (updatedScene.isActive && onUpdateScene) {
+               onUpdateScene(updatedScene)
+            }
+         }
+         catch (error) {
             console.error("Erro ao salvar config:", error)
             alert("Erro ao salvar configurações.")
          }
@@ -168,36 +177,75 @@ const SceneManager = ({ campaignId, onClose, onActivateScene }) => {
                {editingScene.type === 'map' && (
                   <div className="space-y-6">
 
-                     {/* Seção Grid */}
+                     {/* Grid & Layout */}
                      <div className="bg-white/5 p-4 rounded border border-white/10 space-y-4">
-                        <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                           <h4 className="text-sm font-bold text-indigo-400 uppercase flex items-center gap-2">
-                              <FaMap /> Grid & Layout
-                           </h4>
-                           {/* Toggle Grid */}
-                           <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer select-none">
-                              <span>Habilitar Grid</span>
+                        <h4 className="text-sm font-bold text-indigo-400 uppercase flex items-center gap-2 border-b border-white/10 pb-2">
+                           <FaMap /> Grid & Layout
+                        </h4>
+
+                        {/* Controles do tabuleiro */}
+                        <div className="flex flex-col justify-between gap-3 mb-3">
+                           <h5 className="text-xs font-bold text-gray-400 uppercase">Tabuleiro</h5>
+
+                           <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
                               <input
                                  type="checkbox"
-                                 checked={editingScene.mapConfig?.gridEnabled ?? true}
-                                 onChange={e => updateEdit('mapConfig.gridEnabled', e.target.checked)}
+                                 checked={editingScene.mapConfig?.mapSize?.limitView ?? true}
+                                 onChange={e => updateEdit('mapConfig.mapSize.limitView', e.target.checked)}
                                  className="accent-indigo-500 w-4 h-4"
                               />
+                              <span>Limitar Câmera</span>
                            </label>
-                        </div>
 
-                        {/* Controles do Grid (Só aparecem se habilitado) */}
-                        {(editingScene.mapConfig?.gridEnabled ?? true) && (
-                           <div className="grid grid-cols-2 gap-4 animate-fade-in">
-                              <div>
-                                 <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Tamanho (px)</label>
+                           <div className="flex gap-4">
+                              <div className="flex-1">
+                                 <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Largura (X)</label>
                                  <input
-                                    type="number"
-                                    value={editingScene.mapConfig?.gridSize || 70}
-                                    onChange={e => updateEdit('mapConfig.gridSize', Number(e.target.value))}
-                                    className="w-full bg-black/40 border border-white/10 rounded p-2 text-white text-xs"
+                                    type="number" min="10" max="500"
+                                    value={editingScene.mapConfig?.mapSize?.mapWidth || 30}
+                                    onChange={e => updateEdit('mapConfig.mapSize.mapWidth', Number(e.target.value))}
+                                    className="w-full bg-black/40 border border-white/10 rounded p-2 text-white text-xs text-center"
                                  />
                               </div>
+
+                              <div className="flex items-center pt-4 text-gray-600">x</div>
+
+                              <div className="flex-1">
+                                 <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Altura (Y)</label>
+                                 <input
+                                    type="number" min="10" max="500"
+                                    value={editingScene.mapConfig?.mapSize?.mapHeight || 20}
+                                    onChange={e => updateEdit('mapConfig.mapSize.mapHeight', Number(e.target.value))}
+                                    className="w-full bg-black/40 border border-white/10 rounded p-2 text-white text-xs text-center"
+                                 />
+                              </div>
+                           </div>
+
+                           <div>
+                              <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Tamanho (px)</label>
+                              <input
+                                 type="number"
+                                 value={editingScene.mapConfig?.gridSize || 70}
+                                 onChange={e => updateEdit('mapConfig.gridSize', Number(e.target.value))}
+                                 className="w-full bg-black/40 border border-white/10 rounded p-2 text-white text-xs"
+                              />
+                           </div>
+                        </div>
+
+                        {/* Controles do Grid */}
+                        <div className="flex flex-col justify-between gap-3 pt-3 mb-2 border-t border-white/10">
+                           <h5 className="text-xs font-bold text-gray-400 uppercase">Grid</h5>
+                           <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer select-none">
+                              <input
+                                 type="checkbox"
+                                 checked={editingScene.mapConfig?.gridSnap}
+                                 onChange={e => updateEdit('mapConfig.gridSnap', e.target.checked)}
+                                 className="accent-indigo-500 w-4 h-4"
+                              />
+                              <span>Snap (Imã)</span>
+                           </label>
+                           <div className="grid grid-cols-2 gap-4 animate-fade-in">
+
                               <div>
                                  <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Cor da Linha</label>
                                  <div className="flex gap-2 h-[34px]">
@@ -228,7 +276,8 @@ const SceneManager = ({ campaignId, onClose, onActivateScene }) => {
                                  />
                               </div>
                            </div>
-                        )}
+                        </div>
+
                      </div>
 
                      {/* Seção Escala (Metros) */}
