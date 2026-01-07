@@ -1,6 +1,6 @@
-import { useState, useEffect, useContext } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AuthContext } from '../context/authContext'
+import { AuthContext, useAuth } from '../context/authContext'
 import RequireRole from '../components/RequireRole'
 import api from '../config/api'
 
@@ -10,7 +10,7 @@ const Home = () => {
    const [campaigns, setCampaigns] = useState([])
    const [showModal, setShowModal] = useState(false)
 
-   const { user, logoutUser } = useContext(AuthContext)
+   const { user, logoutUser } = useAuth()
    const navigate = useNavigate()
 
    useEffect(() => {

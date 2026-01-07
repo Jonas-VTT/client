@@ -27,7 +27,7 @@ const Login = () => {
     try {
       const { data } = await api.post('/auth/login', formData)
       
-      loginUser(data, data.token)
+      loginUser(data.token)
       
       navigate('/home')
     } catch (err) {

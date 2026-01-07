@@ -1,28 +1,28 @@
-import React, { useState, useRef, useEffect, useMemo, useContext, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useMemo, useContext, useCallback, memo } from 'react'
 import { Stage, Layer, Image as KonvaImage, Line, Transformer, Tag, Text as KonvaText, Group, Rect, Circle } from 'react-konva'
 import useImage from 'use-image'
 import api from '../../config/api'
 import { AuthContext } from '../../context/authContext'
 
-import { getDistance, getAngleDegrees, getRayIntersection } from '../../utils/geometry'
+import { getDistance, getAngleDegrees, getRayIntersection, lerp } from '../../utils/geometry'
 
 import DebugMonitor from '../DebugMonitor'
 
 import { FaTrash, FaHeart, FaBrain, FaBolt, FaVideo, FaEye, FaEyeSlash } from 'react-icons/fa'
 
-// ELEMENTOS DO MAPA
-const ElementImage = ({
+//#region ELEMENTOS DO MAPA
+const ElementImage = memo(({
    src, x, y, rotation, width, height,
    isSelected, onSelect,
    isDraggable, checkCollide,
    ...props
 }) => {
    const [image] = useImage(src)
-   const nodeRef = useRef(null)
+   const shapeRef = useRef(null)
    const isFirstRender = useRef(true)
 
    useEffect(() => {
-      const node = nodeRef.current
+      const node = shapeRef.current
       if (!node) return
 
       if (isFirstRender.current) {
@@ -45,7 +45,7 @@ const ElementImage = ({
 
    return (
       <KonvaImage
-         ref={nodeRef}
+         ref={shapeRef}
          image={image}
          width={width}
          height={height}
@@ -65,7 +65,6 @@ const ElementImage = ({
 
          onDragStart={(e) => {
             e.target.moveToTop()
-            e.target.to({ scaleX: 1.1, scaleY: 1.1, duration: 0.1 })
             e.target.getStage().container().style.cursor = 'grabbing'
             if (onSelect) onSelect()
             if (props.onDragStart) props.onDragStart(e)
@@ -74,13 +73,12 @@ const ElementImage = ({
             if (props.onDragMove) props.onDragMove(e)
          }}
          onDragEnd={(e) => {
-            e.target.to({ scaleX: 1, scaleY: 1, duration: 0.1 })
             e.target.getStage().container().style.cursor = isDraggable ? 'grab' : 'default'
             if (props.onDragEnd) props.onDragEnd(e)
          }}
          dragBoundFunc={(pos) => {
-            if (checkCollide && nodeRef.current) {
-               return checkCollide(pos, nodeRef.current)
+            if (checkCollide && shapeRef.current) {
+               return checkCollide(pos, shapeRef.current)
             }
             return pos
          }}
@@ -100,9 +98,21 @@ const ElementImage = ({
          }}
       />
    )
+})
+const ElementHUDMemo = (prev, next) => {
+   if (!prev.element || !next.element) return false
+   if (!prev.position || !next.position) return false
+
+   const isSameId = prev.element.id === next.element.id
+   const isSameVisibility = prev.element.visible === next.element.visible
+   const isSameCharId = prev.element.linkedCharacterId === next.element.linkedCharacterId
+   const isSamePos = prev.position.x === next.position.x && prev.position.y === next.position.y
+   const isSameMaster = prev.isMaster === next.isMaster
+
+   return isSameId && isSameVisibility && isSameCharId && isSamePos && isSameMaster
 }
-const ElementHUD = ({ element, position, onDelete, onToggleVisibility, socket, isMaster }) => {
-   if (!position) return null
+const ElementHUD = memo(({ element, position, onDelete, onToggleVisibility, socket, isMaster }) => {
+   if (!element || !position) return null
 
    const [charData, setCharData] = useState(null)
    const [loading, setLoading] = useState(true)
@@ -111,35 +121,47 @@ const ElementHUD = ({ element, position, onDelete, onToggleVisibility, socket, i
    const hasSheet = !!element.linkedCharacterId
 
    useEffect(() => {
+      let isMounted = true
+
       if (!hasSheet) {
-         setCharData(null)
-         setLoading(false)
+         if (isMounted) {
+            setCharData(null)
+            setLoading(false)
+         }
          return
       }
 
       const fetchChar = async () => {
-         if (!element.linkedCharacterId) {
-            setLoading(false); return
-         }
-         try {
-            const { data } = await api.get(`/characters/${element.linkedCharacterId}`)
-            setCharData(data)
-         }
-         catch (err) {
-            console.error(err)
-         }
-         finally {
-            setLoading(false)
+         if (isMounted) {
+            console.log('fetch')
+            if (!element.linkedCharacterId) {
+               setLoading(false)
+               return
+            }
+            try {
+               const { data } = await api.get(`/characters/${element.linkedCharacterId}`)
+               setCharData(data)
+            }
+            catch (error) {
+               console.error(error)
+            }
+            finally {
+               setLoading(false)
+            }
          }
       }
+
       fetchChar()
-   }, [element.linkedCharacterId])
+      return () => { isMounted = false }
+   }, [element.linkedCharacterId, hasSheet])
    useEffect(() => {
       if (!socket) return
 
       const handleSocketUpdate = (updatedChar) => {
          if (updatedChar._id === element.linkedCharacterId) {
-            setCharData(updatedChar)
+            setCharData(prev => {
+               if (JSON.stringify(prev) === JSON.stringify(updatedChar)) return prev
+            })
          }
       }
 
@@ -147,7 +169,7 @@ const ElementHUD = ({ element, position, onDelete, onToggleVisibility, socket, i
       return () => {
          socket.off('character_updated', handleSocketUpdate)
       }
-   }, [socket, element.linkedCharacterId])
+   }, [socket, element.linkedCharacterId, hasSheet])
 
    const handleInputChange = (stat, newValue) => {
       setCharData(prev => ({
@@ -180,11 +202,11 @@ const ElementHUD = ({ element, position, onDelete, onToggleVisibility, socket, i
       <div
          className="absolute z-50 animate-slide-up flex flex-col items-center gap-2"
          style={{
-            left: position.x - 48,
-            top: position.y - 10
+            left: -47,
+            top: 0
          }}
       >
-         {/* LINHA DE STATUS (Lado a Lado) */}
+         {/* LINHA DE STATUS */}
          {showStats && (
             <div className="flex gap-2">
 
@@ -236,7 +258,7 @@ const ElementHUD = ({ element, position, onDelete, onToggleVisibility, socket, i
             </div>
          )}
 
-         {/* BOTÕES DE AÇÃO (Em baixo das bolinhas) */}
+         {/* BOTÕES DE AÇÃO */}
          <div
             className="absolute w-full flex justify-center gap-3 pointer-events-none"
             style={{
@@ -248,7 +270,7 @@ const ElementHUD = ({ element, position, onDelete, onToggleVisibility, socket, i
                   onClick={() => onToggleVisibility(element)}
                   title={isVisible ? "Tornar Invisível" : "Tornar Visível"}
                   className={`w-10 h-10 flex items-center justify-center border border-gray-800 rounded-full shadow-lg pointer-events-auto hover:scale-110 transition-all cursor-pointer backdrop-blur-sm
-                     ${isVisible ? 'bg-gray-500/70 text-gray-300 hover:text-white' : 'bg-indigo-600/90 text-white border-indigo-400'}`}
+                        ${isVisible ? 'bg-gray-500/70 text-gray-300 hover:text-white' : 'bg-indigo-600/90 text-white border-indigo-400'}`}
                >
                   {isVisible ? <FaEye size={16} /> : <FaEyeSlash size={16} />}
                </button>
@@ -258,17 +280,17 @@ const ElementHUD = ({ element, position, onDelete, onToggleVisibility, socket, i
                onClick={onDelete}
                title="Deletar Token"
                className="bg-gray-500/70 w-10 h-10 text-gray-300 flex items-center justify-center border border-gray-800 rounded-full shadow-lg
-                pointer-events-auto hover:text-gray-100 hover:scale-110 transition-all active:scale-95  cursor-pointer backdrop-blur-sm"
+                  pointer-events-auto hover:text-gray-100 hover:scale-110 transition-all active:scale-95  cursor-pointer backdrop-blur-sm"
             >
                <FaTrash size={12} />
             </button>
          </div>
       </div>
    )
-}
-const lerp = (start, end, factor) => start + (end - start) * factor
+}, ElementHUDMemo)
+//#endregion
 
-// RENDERS
+//#region RENDERS
 const GridRenderer = React.memo(({ width, height, gridSize, gridColor, gridOpacity }) => {
    if (!gridSize || gridSize <= 0 || gridOpacity === 0) return null
 
@@ -337,7 +359,6 @@ const ElementsGroup = React.memo(({
    const isObjectLayerActive = isMaster ? (activeLayer === 'object') : false
    const checkActive = (layerName === 'object') ? isObjectLayerActive : isLayerActive
 
-   // Helper para verificar dono do token (trazido para dentro para contexto)
    const checkIsMyToken = (token) => {
       if (!user) return false
       if (token.type !== 'token') return true
@@ -346,36 +367,36 @@ const ElementsGroup = React.memo(({
       return !!char
    }
 
-   return elements.map((el) => {
-      const isVisible = el.visible !== false
+   return elements.map((element) => {
+      const isVisible = element.visible !== false
       if (!isVisible && !isMaster) return null
-      const finalOpacity = !isVisible ? 0.4 : (el.opacity || 1)
+      const finalOpacity = !isVisible ? 0.4 : (element.opacity || 1)
 
       const isInteractive = checkActive
-      const allowInteract = isInteractive && !el.locked && (['select', 'gallery'].includes(activeTool) && checkIsMyToken(el))
-      const isSelected = selectedIds.includes(el.id)
+      const allowInteract = isInteractive && !element.locked && (['select', 'gallery'].includes(activeTool) && checkIsMyToken(element))
+      const isSelected = selectedIds.includes(element.id)
 
       // PAREDE
-      if (el.type === 'wall') {
+      if (element.type === 'wall') {
          return (
             <WallShape
-               key={el.id}
-               el={el}
+               key={element.id}
+               element={element}
                isSelected={isSelected}
-               onSelect={() => onSelectElement(el.id)}
+               onSelect={() => onSelectElement(element.id)}
                isInteractive={allowInteract && isMaster}
                gridSize={gridSize}
             />
          )
       }
       // CHÃO
-      if (el.type === 'floor') {
+      if (element.type === 'floor') {
          return (
             <FloorShape
-               key={el.id}
-               el={el}
+               key={element.id}
+               element={element}
                isSelected={isSelected}
-               onSelect={() => onSelectElement(el.id)}
+               onSelect={() => onSelectElement(element.id)}
                isInteractive={allowInteract && isMaster}
                gridSize={gridSize}
             />
@@ -384,14 +405,14 @@ const ElementsGroup = React.memo(({
       // TOKEN / OBJETO / IMAGEM
       return (
          <ElementImage
-            key={el.id}
-            id={el.id}
-            src={el.src}
-            x={el.x}
-            y={el.y}
-            width={el.width}
-            height={el.height}
-            rotation={el.rotation}
+            key={element.id}
+            id={element.id}
+            src={element.src}
+            x={element.x}
+            y={element.y}
+            width={element.width}
+            height={element.height}
+            rotation={element.rotation}
             opacity={finalOpacity}
             listening={isInteractive}
             isSelected={isSelected}
@@ -400,10 +421,10 @@ const ElementsGroup = React.memo(({
             checkCollide={checkCollide}
 
             // Eventos passados pelo pai
-            onSelect={() => allowInteract && onSelectElement(el.id)}
+            onSelect={() => allowInteract && onSelectElement(element.id)}
             onDragStart={onDragStart}
             onDragMove={onDragMove}
-            onDragEnd={(e) => onDragEnd(e, el)}
+            onDragEnd={(e) => onDragEnd(e, element)}
          />
       )
    })
@@ -417,8 +438,9 @@ const ElementsGroup = React.memo(({
       prev.isMaster === next.isMaster
    )
 })
+//#endregion
 
-// FERRAMENTA DE RÉGUA
+//#region FERRAMENTA DE RÉGUA
 const RulerOverlay = ({ start, end, gridSize = 70 }) => {
    if (!start || !end) return null
 
@@ -470,8 +492,9 @@ const RulerOverlay = ({ start, end, gridSize = 70 }) => {
       </Group>
    )
 }
+//#endregion
 
-// FERRAMENTA DE DESENHO
+//#region FERRAMENTA DE DESENHO
 const DRAWING_CONFIG = {
    wall: {
       defaultShape: 'poly',
@@ -490,25 +513,26 @@ const DRAWING_CONFIG = {
       forceStrokeWidth: false
    }
 }
-const FloorShape = ({ el, isSelected, onSelect, isInteractive, gridSize = 70 }) => {
-   const [pattern] = useImage(el.src)
+const FloorShape = ({ element, isSelected, onSelect, isInteractive, gridSize = 70 }) => {
+   const [pattern] = useImage(element.src)
 
    const patternScale = useMemo(() => {
       if (!pattern) return { x: 1, y: 1 }
-      const tx = el.tilesX || 1
-      const ty = el.tilesY || 1
+      const tx = element.tilesX || 1
+      const ty = element.tilesY || 1
+
       return {
          x: (gridSize * tx) / pattern.width,
          y: (gridSize * ty) / pattern.height
       }
-   }, [pattern, gridSize, el.tilesX, el.tilesY])
+   }, [pattern, gridSize, element.tilesX, element.tilesY])
 
    const shapeProps = {
-      id: el.id,
-      x: el.x,
-      y: el.y,
-      rotation: el.rotation,
-      opacity: el.opacity,
+      id: element.id,
+      x: element.x,
+      y: element.y,
+      rotation: element.rotation,
+      opacity: element.opacity,
 
       fillPatternImage: pattern,
       fillPatternScale: patternScale,
@@ -516,7 +540,7 @@ const FloorShape = ({ el, isSelected, onSelect, isInteractive, gridSize = 70 }) 
 
       stroke: isSelected ? '#4f46e5' : null,
       strokeWidth: isSelected ? 2 : 0,
-      draggable: isInteractive && !el.locked,
+      draggable: isInteractive && !element.locked,
       listening: isInteractive,
 
       closed: true,
@@ -532,20 +556,20 @@ const FloorShape = ({ el, isSelected, onSelect, isInteractive, gridSize = 70 }) 
       },
    }
 
-   if (el.shapeType === 'rect') {
+   if (element.shapeType === 'rect') {
       return (
          <Rect
             {...shapeProps}
-            width={el.width}
-            height={el.height}
+            width={element.width}
+            height={element.height}
          />
       )
    }
-   if (el.shapeType === 'poly') {
+   if (element.shapeType === 'poly') {
       return (
          <Line
             {...shapeProps}
-            points={el.points}
+            points={element.points}
             closed={true}
          />
       )
@@ -553,38 +577,38 @@ const FloorShape = ({ el, isSelected, onSelect, isInteractive, gridSize = 70 }) 
 
    return null
 }
-const WallShape = ({ el, isSelected, onSelect, isInteractive, gridSize = 70 }) => {
-   const [pattern] = useImage(el.src)
+const WallShape = ({ element, isSelected, onSelect, isInteractive, gridSize = 70 }) => {
+   const [pattern] = useImage(element.src)
    const radius = 20 / 2
    const convertedPoints = useMemo(() => {
-      const wallPoints = el.points || []
+      const wallPoints = element.points || []
       const p = []
       for (let i = 0; i < wallPoints.length; i += 2) {
          p.push({ x: wallPoints[i], y: wallPoints[i + 1] })
       }
       return p
-   }, [el.points])
+   }, [element.points])
    const patternScale = useMemo(() => {
       if (!pattern) return { x: 1, y: 1 }
-      const tx = el.tilesX || 1
-      const ty = el.tilesY || 1
+      const tx = element.tilesX || 1
+      const ty = element.tilesY || 1
       return {
          x: (gridSize * tx) / pattern.width,
          y: (gridSize * ty) / pattern.height
       }
-   }, [pattern, gridSize, el.tilesX, el.tilesY])
+   }, [pattern, gridSize, element.tilesX, element.tilesY])
 
    const shapeProps = {
-      id: el.id,
+      id: element.id,
       name: 'collisor',
-      x: el.x,
-      y: el.y,
-      rotation: el.rotation,
-      opacity: el.opacity,
+      x: element.x,
+      y: element.y,
+      rotation: element.rotation,
+      opacity: element.opacity,
 
       stroke: isSelected ? '#4f46e5' : null,
       strokeWidth: isSelected ? 2 : 0,
-      draggable: isInteractive && !el.locked,
+      draggable: isInteractive && !element.locked,
       listening: isInteractive,
 
       closed: true,
@@ -600,7 +624,7 @@ const WallShape = ({ el, isSelected, onSelect, isInteractive, gridSize = 70 }) =
       }
    }
 
-   if (el.shapeType === 'poly') {
+   if (element.shapeType === 'poly') {
       return (
          <Group {...shapeProps}>
             {convertedPoints.map((point, i) => {
@@ -646,6 +670,7 @@ const WallShape = ({ el, isSelected, onSelect, isInteractive, gridSize = 70 }) =
    }
    return null
 }
+//#endregion
 
 const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeTool, socket, isSyncing, objectDrawing, activeLayer }) => {
    //#region VARIAVEIS
@@ -658,12 +683,12 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
    const targetView = useRef({ x: 0, y: 0, scale: 1 })
    const positionRef = useRef({ x: 0, y: 0 })
 
-   const [menuPos, setMenuPos] = useState(null)
    const [selectedIds, setSelectedIds] = useState([])
    const [scale, setScale] = useState(1)
    const [position, setPosition] = useState({ x: 0, y: 0 })
    const [ruler, setRuler] = useState(null)
    const [isViewLocked, setIsViewLocked] = useState(false)
+   const hudContainerRef = useRef(null)
 
    const [myCharacters, setMyCharacters] = useState([])
 
@@ -684,6 +709,7 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
    const [drawingPattern] = useImage(objectDrawing?.texture || '')
 
    const [isFogEnabled, setIsFogEnabled] = useState(true)
+   const [fogShapes, setFogShapes] = useState([])
    //#endregion
 
    //#region ---------- DEBUG ---------
@@ -715,7 +741,6 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
       mousePos: currentMousePos,
       elementsCount: activeScene?.elements?.length || 0
    }
-   const [debugShapes, setDebugShapes] = useState([])
    const wallCache = useRef([])
    useEffect(() => {
       const handleDebugKey = (e) => {
@@ -728,7 +753,7 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
    }, [])
    //#endregion
 
-   //#region --------- INTERAÇÃO E SELEÇÃO ---------
+   //#region --------- INTERAÇÃO E SELEÇÃO ---------  
    useEffect(() => {
       if (selectedIds.length > 0 && transformerRef.current) {
          const stage = stageRef.current
@@ -736,7 +761,9 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
 
          if (selectedNodes.length === 0) {
             setSelectedIds([])
-            setMenuPos(null)
+            if (hudContainerRef.current) {
+               hudContainerRef.current.style.display = 'none'
+            }
             return
          }
 
@@ -749,7 +776,7 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
          if (transformerRef.current) {
             transformerRef.current.nodes([])
          }
-         setMenuPos(null)
+         if (hudContainerRef.current) hudContainerRef.current.style.display = 'none'
       }
    }, [selectedIds, activeScene.elements]) // Atualiza a caixa de seleção
    useEffect(() => {
@@ -761,7 +788,7 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
             if (!isMaster) return
 
             selectedIds.forEach(id => {
-               const element = activeScene.elements.find(el => el.id === id)
+               const element = activeScene.elements.find(element => element.id === id)
                if (element) {
                   handleToggleVisibility(element)
                }
@@ -774,9 +801,8 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
    }, [selectedIds, activeScene])
    useEffect(() => {
       setSelectedIds([])
-      setMenuPos(null)
       if (transformerRef.current) transformerRef.current.nodes([])
-   }, [activeLayer]) // Limpa a seleção quando troca de camada
+   }, [activeLayer])
 
    const getCursorStyle = () => {
       if (activeTool === 'ruler' || activeTool === 'draw' || activeTool === 'ping') return 'crosshair'
@@ -784,7 +810,9 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
    }
    const updateMenuPosition = () => {
       if (selectedIds.length === 0 || !transformerRef.current || transformerRef.current.nodes().length === 0) {
-         setMenuPos(null)
+         if (hudContainerRef.current) {
+            hudContainerRef.current.style.display = 'none'
+         }
          return
       }
 
@@ -798,11 +826,10 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
       let x = box.x + (box.width / 2) - (buttonSize / 2)
       let y = box.y - buttonSize - margin + paddingDoTransformer
 
-      if (y < 0) {
-         y = box.y + box.height + margin - paddingDoTransformer
+      if (hudContainerRef.current) {
+         hudContainerRef.current.style.display = 'block'
+         hudContainerRef.current.style.transform = `translate(${x}px, ${y}px)`
       }
-
-      setMenuPos({ x, y })
    }
    const checkDeselect = (e) => {
       if (!['select', 'gallery'].includes(activeTool)) return
@@ -813,7 +840,6 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
          if (transformerRef.current) {
             transformerRef.current.nodes([])
          }
-         setMenuPos(null)
       }
    }
    const handleDeleteSelected = async () => {
@@ -821,13 +847,15 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
 
       try {
          if (transformerRef.current) transformerRef.current.nodes([])
-         setMenuPos(null)
+         if (hudContainerRef.current) {
+            hudContainerRef.current.style.display = 'none'
+         }
 
          const idsToDelete = [...selectedIds]
          setSelectedIds([])
 
          for (const id of idsToDelete) {
-            const element = activeScene.elements.find(el => el.id === id)
+            const element = activeScene.elements.find(element => element.id === id)
             if (!element) continue
             const isMine = checkIsMyToken(element)
 
@@ -838,26 +866,26 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
 
             await api.delete(`/scenes/${activeScene._id}/elements/${id}`)
          }
-         const newElements = activeScene.elements.filter(el => !selectedIds.includes(el.id))
+         const newElements = activeScene.elements.filter(element => !selectedIds.includes(element.id))
          onUpdateScene({ ...activeScene, elements: newElements })
       }
       catch (error) {
          console.error("Erro ao deletar", error)
       }
    }
-   const handleToggleVisibility = async (element) => {
+   const handleToggleVisibility = async (targetElement) => {
       if (!isMaster) return
 
-      const newVisibleState = element.visible === false ? true : false
+      const newVisibleState = targetElement.visible === false ? true : false
 
       try {
-         const updatedEl = { ...element, visible: newVisibleState }
-         const newElements = activeScene.elements.map(el =>
-            el.id === element.id ? updatedEl : el
+         const updatedEl = { ...targetElement, visible: newVisibleState }
+         const newElements = activeScene.elements.map(element =>
+            element.id === targetElement.id ? updatedEl : element
          )
          onUpdateScene({ ...activeScene, elements: newElements })
 
-         await api.put(`/scenes/${activeScene._id}/elements/${element.id}`, {
+         await api.put(`/scenes/${activeScene._id}/elements/${targetElement.id}`, {
             visible: newVisibleState
          })
       }
@@ -1033,24 +1061,19 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
       const wallPolygons = wallCache.current
       const currentAbsPos = tokenNode.getAbsolutePosition()
       const stage = tokenNode.getStage()
-      const wallNodes = stage.find('.collisor')
-      wallNodes.forEach(group => {
-         if (!group.isVisible()) return
-         group.getChildren().forEach(segment => {
-            wallPolygons.push(getCorners(segment))
-         })
-      })
+
+      const scale = stage.scaleX()
+      const tokenWidth = tokenNode.width() * scale
+      const tokenHeight = tokenNode.height() * scale
 
       //#region LIMITE DE MAPA
       const stageX = stage.x()
       const stageY = stage.y()
-      const scale = stage.scaleX()
-      const tokenW = tokenNode.width() * scale
-      const tokenH = tokenNode.height() * scale
-      const minX = stageX + tokenW / 2
-      const minY = stageY + tokenH / 2
-      const maxX = stageX + (mapWidth * scale) - tokenW
-      const maxY = stageY + (mapHeight * scale) - tokenH
+
+      const minX = stageX + tokenWidth / 2
+      const minY = stageY + tokenHeight / 2
+      const maxX = stageX + (mapWidth * scale) - tokenWidth / 2
+      const maxY = stageY + (mapHeight * scale) - tokenHeight / 2
 
       const clampedPos = {
          x: Math.max(minX, Math.min(pos.x, maxX)),
@@ -1058,43 +1081,43 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
       }
       //#endregion
 
-      // COLISÃO
-      if (wallNodes.length == 0) return clampedPos
+      //#region COLISÃO
+      const element = activeScene.elements.find(el => el.id === tokenNode.id())
+      if (element && element.visible === false) return clampedPos
+      if (wallPolygons.length == 0) return clampedPos
 
       const dx = pos.x - currentAbsPos.x
       const dy = pos.y - currentAbsPos.y
-      const distance = Math.hypot(dx, dy)
 
-      const stepSize = 15
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return currentAbsPos
+
+      const distance = Math.hypot(dx, dy)
+      const stepSize = 10
       const steps = Math.ceil(distance / stepSize)
       let lastSafePos = currentAbsPos
-
-      const tRect = tokenNode.getClientRect({ skipTransform: true })
-      const tW = tRect.width * scale
-      const tH = tRect.height * scale
-      const offsetX = (tokenNode.width() / 2) * scale
-      const offsetY = (tokenNode.height() / 2) * scale
 
       for (let i = 1; i <= steps; i++) {
          const progress = i / steps
          const nextCenterX = currentAbsPos.x + (dx * progress)
          const nextCenterY = currentAbsPos.y + (dy * progress)
-         const nextX = nextCenterX - offsetX
-         const nextY = nextCenterY - offsetY
+
+         const nextX = nextCenterX - (tokenWidth / 2)
+         const nextY = nextCenterY - (tokenHeight / 2)
 
          const tokenPolygon = [
             { x: nextX, y: nextY },
-            { x: nextX + tW, y: nextY },
-            { x: nextX + tW, y: nextY + tH },
-            { x: nextX, y: nextY + tH }
+            { x: nextX + tokenWidth, y: nextY },
+            { x: nextX + tokenWidth, y: nextY + tokenHeight },
+            { x: nextX, y: nextY + tokenHeight }
          ]
 
          const hasCollision = wallPolygons.some(wallPoly => {
             return doPolygonsIntersect(wallPoly, tokenPolygon)
          })
          if (hasCollision) return lastSafePos
-         lastSafePos = { x: nextX, y: nextY }
+         lastSafePos = { x: nextCenterX, y: nextCenterY }
       }
+      //#endregion
 
       return clampedPos
    }
@@ -1299,9 +1322,6 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
    const handleMouseMove = (e) => {
       const stage = e.target.getStage()
 
-      const point = stage.getRelativePointerPosition()
-      setCurrentMousePos(point)
-
       if (isPanning.current) {
          e.evt.preventDefault()
          if (isViewLocked) return
@@ -1316,14 +1336,12 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
          positionRef.current = newPos
          setPosition(newPos)
          lastMousePos.current = { x: e.evt.clientX, y: e.evt.clientY }
-         updateMenuPosition()
 
          if (isSyncing) broadcastView(newPos, scale)
-
-         return
       }
       if (ruler && activeTool === 'ruler') {
          const pointer = stage.getRelativePointerPosition()
+         setCurrentMousePos(pointer)
          setRuler(prev => ({ ...prev, end: pointer }))
       }
       if (activeTool === 'gallery') {
@@ -1374,15 +1392,15 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
       const fetchMyChars = async () => {
          try {
             if (!activeScene?.campaign) return
-            // Faz o request UMA vez
             const { data } = await api.get(`/characters/my/${activeScene.campaign}`)
-            setMyCharacters(data) // Salva na memória
-         } catch (err) {
+            setMyCharacters(data)
+         }
+         catch (err) {
             console.error(err)
          }
       }
       fetchMyChars()
-   }, [activeScene])
+   }, [activeScene?.campaign])
 
    const checkIsMyToken = (token) => {
       if (!user) return false
@@ -1581,67 +1599,90 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
 
       return intersects.flatMap(p => [p.x, p.y])
    }
-   const fogShapes = useMemo(() => {
-      if (!isFogEnabled) return null;
+   useEffect(() => {
+      const timer = setTimeout(() => {
+         if (!isFogEnabled) {
+            setFogShapes([])
+            return
+         }
 
-      return tokenElements.map(token => {
-         if (!checkIsMyToken(token)) return null
-         const points = calculateSightPolygon(token.x, token.y);
+         const newShapes = tokenElements.map(token => {
+            if (token.visible === false) return null
+            if (!checkIsMyToken(token)) return null
 
-         return (
-            <Line
-               key={`vision-${token.id}`}
-               points={points}
-               closed={true}
-               fill="white"
-               listening={false}
-            />
-         );
-      });
+            const points = calculateSightPolygon(token.x, token.y)
+            return (
+               <Line
+                  key={`vision-${token.id}`}
+                  points={points}
+                  closed={true}
+                  fill="white"
+                  listening={false}
+               />
+            )
+         })
+         setFogShapes(newShapes);
+      }, 0)
+
+      return () => clearTimeout(timer)
    }, [tokenElements, isFogEnabled, wallSegments, myCharacters, user])
    //#endregion
 
    //#region --------- SISTEMA DE RENDERER ---------
    const handleElementSelect = useCallback((id) => {
       if (['select', 'gallery'].includes(activeTool) && isMaster) {
-         setSelectedIds([id])
-      } else {
-         // Lógica para players selecionarem tokens (se necessário)
-         setSelectedIds([id])
+         setSelectedIds(prev => {
+            if (prev.length === 1 && prev[0] === id) return prev
+            return [id]
+         })
+      }
+      else {
+         setSelectedIds(prev => {
+            if (prev.length === 1 && prev[0] === id) return prev
+            return [id]
+         })
       }
    }, [activeTool, isMaster])
 
    const handleDragStart = useCallback((e) => {
       e.target.moveToTop()
-      e.target.to({ scaleX: 1.1, scaleY: 1.1, duration: 0.1 })
 
-      // Cache de colisão (igual ao seu código anterior)
       const stage = e.target.getStage()
       const walls = stage.find('.collisor')
       wallCache.current = []
       walls.forEach(group => {
          if (!group.isVisible()) return
+
+         const elementData = activeScene.elements.find(el => el.id === group.id())
+         if (elementData && elementData.visible === false) return
+
          group.getChildren().forEach(segment => {
             wallCache.current.push(getCorners(segment))
          })
       })
 
-      // Régua
-      const el = activeScene.elements.find(x => x.id === e.target.attrs.id) // Busca segura
-      if (activeTool === 'ruler' && el) {
-         setRuler({ start: { x: el.x, y: el.y }, end: { x: el.x, y: el.y } })
+      if (hudContainerRef.current) {
+         hudContainerRef.current.style.opacity = '0'
+         hudContainerRef.current.style.pointerEvents = 'none'
       }
-      updateMenuPosition()
+      const id = e.target.attrs.id
+      if (!selectedIds.includes(id)) {
+         handleElementSelect(id)
+      }
+
+      const element = activeScene.elements.find(x => x.id === e.target.attrs.id)
+      if (activeTool === 'ruler' && element) {
+         setRuler({ start: { x: element.x, y: element.y }, end: { x: element.x, y: element.y } })
+      }
    }, [activeTool, activeScene.elements])
 
    const handleDragMove = useCallback((e) => {
-      updateMenuPosition()
       if (activeTool === 'ruler') {
          setRuler(prev => ({ ...prev, end: { x: e.target.x(), y: e.target.y() } }))
       }
    }, [activeTool])
 
-   const handleDragEnd = useCallback(async (e, el) => {
+   const handleDragEnd = useCallback(async (e, element) => {
       setRuler(null)
       const dropX = e.target.x()
       const dropY = e.target.y()
@@ -1655,12 +1696,15 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
          newY = (row * gridSize) + (gridSize / 2)
       }
 
-      e.target.to({ x: newX, y: newY, scaleX: 1, scaleY: 1, duration: 0.1 })
-      updateMenuPosition()
+      if (hudContainerRef.current) {
+         hudContainerRef.current.style.opacity = '1'
+         hudContainerRef.current.style.pointerEvents = 'auto'
+         updateMenuPosition()
+      }
 
       try {
          const { data: updatedScene } = await api.put(
-            `/scenes/${activeScene._id}/elements/${el.id}`,
+            `/scenes/${activeScene._id}/elements/${element.id}`,
             { x: newX, y: newY, rotation: e.target.rotation() }
          )
          onUpdateScene(updatedScene)
@@ -1674,7 +1718,7 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
       }
       catch (error) {
          console.error("Erro ao mover:", error)
-         e.target.to({ x: el.x, y: el.y, duration: 0.2 })
+         e.target.to({ x: element.x, y: element.y, duration: 0.2 })
       }
    }, [snapEnabled, gridSize, activeScene._id, onUpdateScene])
    //#endregion
@@ -1687,6 +1731,7 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
          className="absolute inset-0 bg-black overflow-hidden"
          style={{ cursor: getCursorStyle() }}
       >
+
          {/* MAPA */}
          <Stage
             width={window.innerWidth}
@@ -1815,7 +1860,7 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
                   rotationSnaps={[0, 90, 180, 270]}
                   rotationSnapTolerance={20}
                   keepRatio={(() => {
-                     const selected = activeScene.elements.find(el => el.id === selectedIds[0])
+                     const selected = activeScene.elements.find(element => element.id === selectedIds[0])
                      return selected ? selected.layer === 'token' : true
                   })()}
                   resizeEnabled={isMaster}
@@ -2013,33 +2058,48 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
          </Stage>
 
          {/* HUD */}
-         {menuPos && selectedIds.length === 1 && (
-            <ElementHUD
-               element={activeScene.elements.find(el => el.id === selectedIds[0])}
-               position={menuPos}
-               isMaster={isMaster}
-               onDelete={handleDeleteSelected}
-               onToggleVisibility={handleToggleVisibility}
-               socket={socket}
-            />
-         )}
-         {menuPos && selectedIds.length > 1 && (
-            <div
-               className="absolute z-50 pointer-events-auto animate-fade-in"
-               style={{ left: menuPos.x, top: menuPos.y }}
-            >
-               <button
-                  onClick={handleDeleteSelected}
-                  className="w-10 h-10 bg-white text-black rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform active:scale-95 border border-gray-300"
-                  title="Deletar Seleção"
+         <div
+            ref={hudContainerRef}
+            style={{
+               position: 'absolute',
+               top: 0,
+               left: 0,
+               display: 'none',
+               opacity: 1,
+               pointerEvents: 'auto',
+               transition: 'opacity 0.2s ease-in-out',
+               zIndex: 50
+            }}
+         >
+            {selectedIds.length === 1 && (
+
+               <ElementHUD
+                  element={activeScene.elements.find(element => element.id === selectedIds[0])}
+                  position={{ x: 0, y: 0 }}
+                  isMaster={isMaster}
+                  onDelete={handleDeleteSelected}
+                  onToggleVisibility={handleToggleVisibility}
+                  socket={socket}
+               />
+            )}
+            {selectedIds.length > 1 && (
+               <div
+                  className="absolute z-50 pointer-events-auto animate-fade-in"
+                  style={{ left: menuPos.x, top: menuPos.y }}
                >
-                  <FaTrash size={14} />
-               </button>
-            </div>
-         )}
+                  <button
+                     onClick={handleDeleteSelected}
+                     className="w-10 h-10 bg-white text-black rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform active:scale-95 border border-gray-300"
+                     title="Deletar Seleção"
+                  >
+                     <FaTrash size={14} />
+                  </button>
+               </div>
+            )}
+         </div>
          <div
             className={`absolute bottom-4 right-4 flex gap-2 transition-all
-            ${isSidebarOpen ? 'right-97' : 'right-15'}`}
+               ${isSidebarOpen ? 'right-97' : 'right-15'}`}
          >
             <div className="bg-black/70 text-white px-3 py-1 rounded text-xs">
                Zoom: {Math.round(scale * 100)}%
@@ -2047,7 +2107,7 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
          </div>
          {isViewLocked && !isMaster && (
             <div className="absolute bg-red-900/5 bottom-5 left-1/2 -translate-x-1/2 text-white/10 px-4 py-2 text-xs font-bold uppercase border border-red-500/10 rounded-full shadow-lg z-40 
-               pointer-events-none animate-pulse">
+                  pointer-events-none animate-pulse">
                <FaVideo className="inline mr-2" /> Câmera Travada
             </div>
          )}

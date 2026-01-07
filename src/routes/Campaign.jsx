@@ -5,7 +5,8 @@ import { io } from 'socket.io-client'
 
 // --- Config & Context ---
 import api from '../config/api'
-import { AuthContext } from '../context/authContext'
+import { useAuth } from '../context/authContext'
+import { useCampaign, CampaignProvider } from '../context/campaignContext'
 
 // ---------------------------------------
 
@@ -28,31 +29,31 @@ import SheetManager from '../components/sheets/SheetManager'
 
 // --- Icons ---
 import { IoChatbubblesSharp } from "react-icons/io5"
-import { FaBookQuran, FaImages } from "react-icons/fa6"
+import { FaBookQuran } from "react-icons/fa6"
 import { FaCog, FaCopy, FaSync, FaUserPlus, FaChevronLeft, FaChevronRight, FaBroadcastTower } from "react-icons/fa"
 
 // ---------------------------------------
 
-const Campaign = () => {
+const CampaignContent = () => {
    // --- Hooks & Refs Essenciais ---
    const { id: campaignId } = useParams()
-   const { user } = useContext(AuthContext)
+   const { user } = useAuth()
+   const {
+      activeCampaign, setActiveCampaign,
+      activeScene, setActiveScene,
+      socket, setSocket,
+      isMaster
+   } = useCampaign()
    const socketRef = useRef(null)
 
    // --- Dados da Campanha & Socket ---
-   const [socket, setSocket] = useState(null)
-   const [campaign, setCampaign] = useState(null)
    const [loading, setLoading] = useState(true)
    const [error, setError] = useState('')
    const [inviteCode, setInviteCode] = useState('')
    const [viewingScene, setViewingScene] = useState(null)
 
    // ---- Variáveis Derivadas (Helpers) ---
-   const mestreId = (campaign?.mestre?._id || campaign?.mestre)?.toString()
-   const userId = (user?._id || user?.id)?.toString()
-   const isMaster = mestreId && userId && mestreId === userId
-   const sceneType = campaign?.activeScene?.type
-   const isPreviewing = isMaster && viewingScene && campaign?.activeScene && viewingScene._id !== campaign.activeScene._id
+   const isPreviewing = isMaster && viewingScene && activeScene && viewingScene._id !== activeCampaign.activeScene._id
 
    // --- Interface (Layout & Tabs) ---
    const [isSidebarOpen, setIsSidebarOpen] = useState(true)
@@ -81,7 +82,6 @@ const Campaign = () => {
    const [libraryFolders, setLibraryFolders] = useState([])
    const [libraryItems, setLibraryItems] = useState([])
    const [isFullGalleryOpen, setIsFullGalleryOpen] = useState(false)
-   const [isQuickGalleryOpen, setIsQuickGalleryOpen] = useState(false)
    const [assetVersion, setAssetVersion] = useState(0)
    const triggerAssetUpdate = () => setAssetVersion(prev => prev + 1)
 
@@ -101,7 +101,7 @@ const Campaign = () => {
 
       newSocket.emit('join_campaign', campaignId)
       newSocket.on('scene_updated', (newScene) => {
-         setCampaign(prev => ({
+         setActiveCampaign(prev => ({
             ...prev,
             activeScene: newScene
          }))
@@ -119,7 +119,6 @@ const Campaign = () => {
          setOpenWindows(prev => prev.map(w =>
             w.id === updatedChar._id ? { ...w, data: updatedChar, title: updatedChar.name } : w
          ))
-         console.log(openWindows)
       })
       newSocket.on('force_view', (viewData) => {
          window.dispatchEvent(new CustomEvent('map_force_view', { detail: viewData }))
@@ -143,7 +142,8 @@ const Campaign = () => {
    const fetchCampaign = async () => {
       try {
          const { data } = await api.get(`/campaigns/${campaignId}`)
-         setCampaign(data)
+         setActiveCampaign(data)
+         setActiveScene(data.activeScene)
          setViewingScene(data.activeScene)
       }
       catch (error) {
@@ -210,7 +210,6 @@ const Campaign = () => {
       ))
    }
    const copyToClipboard = () => {
-      // Cria o link completo (ajuste a URL base conforme seu deploy ou localhost)
       const link = `${window.location.origin}/join/${inviteCode}`
       navigator.clipboard.writeText(link)
       alert("Link copiado! Mande para seus jogadores.")
@@ -225,7 +224,7 @@ const Campaign = () => {
 
             await api.post('/library/folders', {
                name,
-               campaign: campaignId,
+               activeCampaign: campaignId,
                parent: folderId
             })
          }
@@ -235,8 +234,8 @@ const Campaign = () => {
             const payload = {
                campaignId,
                name: `Novo ${type.toUpperCase()}`,
-               type: type,      // 'pc', 'npc', 'doc'
-               folder: folderId // ID da pasta ou null
+               type: type,
+               folder: folderId
             }
 
             const { data: newItem } = await api.post('/characters', payload)
@@ -308,7 +307,7 @@ const Campaign = () => {
             })
          }
 
-         setCampaign(prev => ({
+         setActiveCampaign(prev => ({
             ...prev,
             activeScene: updatedScene
          }))
@@ -322,8 +321,8 @@ const Campaign = () => {
    const handleSceneUpdate = (updatedScene) => {
       setViewingScene(updatedScene)
 
-      if (campaign?.activeScene?._id === updatedScene._id) {
-         setCampaign(prev => ({ ...prev, activeScene: updatedScene }))
+      if (activeCampaign?.activeScene?._id === updatedScene._id) {
+         setActiveCampaign(prev => ({ ...prev, activeScene: updatedScene }))
          if (socket) socket.emit('gm_change_scene', { campaignId, scene: updatedScene })
       }
    }
@@ -368,7 +367,7 @@ const Campaign = () => {
             })
          }
 
-         setCampaign(prev => ({ ...prev, activeScene: updatedScene }))
+         setActiveCampaign(prev => ({ ...prev, activeScene: updatedScene }))
       } catch (error) { console.error("Erro ao transmitir cena:", error) }
    }
 
@@ -576,7 +575,7 @@ const Campaign = () => {
                      system="ordem-paranormal"
                      onUpdate={handleSheetUpdate}
                      onDelete={handleSheetDelete}
-                     campaignPlayers={Campaign?.players}
+                     campaignPlayers={activeCampaign?.players}
                   />
                )}
             </DraggableWindow>
@@ -608,4 +607,12 @@ const Campaign = () => {
    )
 }
 
-export default Campaign
+const CampaignPage = () => {
+   return (
+      <CampaignProvider>
+         <CampaignContent />
+      </CampaignProvider>
+   )
+}
+
+export default CampaignPage
