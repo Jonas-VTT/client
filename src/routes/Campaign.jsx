@@ -30,7 +30,7 @@ import SheetManager from '../components/sheets/SheetManager'
 // --- Icons ---
 import { IoChatbubblesSharp } from "react-icons/io5"
 import { FaBookQuran } from "react-icons/fa6"
-import { FaCog, FaCopy, FaSync, FaUserPlus, FaChevronLeft, FaChevronRight, FaBroadcastTower } from "react-icons/fa"
+import { FaCog, FaCopy, FaSync, FaUserPlus, FaChevronLeft, FaChevronRight, FaBroadcastTower, FaTimes } from "react-icons/fa"
 
 // ---------------------------------------
 
@@ -56,6 +56,7 @@ const CampaignContent = () => {
    const isPreviewing = isMaster && viewingScene && activeScene && viewingScene._id !== activeCampaign.activeScene._id
 
    // --- Interface (Layout & Tabs) ---
+   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
    const [isSidebarOpen, setIsSidebarOpen] = useState(true)
    const [activeTab, setActiveTab] = useState('chat')
 
@@ -434,21 +435,26 @@ const CampaignContent = () => {
 
          {/* BARRA DE CAMADAS */}
          {isMaster && (
-            <LayerSidebar
-               activeLayer={activeLayer}
-               setActiveLayer={setActiveLayer}
-            />
+            <div className='hidden md:block'>
+               <LayerSidebar
+                  activeLayer={activeLayer}
+                  setActiveLayer={setActiveLayer}
+               />
+            </div>
          )}
 
          {/*SIDEBAR*/}
          <div
-            className={`relative bg-black h-full flex flex-col text-white top-0 right-0 border-l border-gray-800 shadow-xl transition-all z-40
-            ${isSidebarOpen ? 'w-120' : 'w-10'}`}
+            className={
+               `bg-black h-full flex flex-col text-white top-0 right-0 border-l border-gray-800 shadow-xl transition-all z-40
+               fixed backdrop-blur-sm ${isSidebarOpen ? 'w-full' : 'w-0'}
+               md:relative md:backdrop-blur-none ${isSidebarOpen ? 'md:w-120' : 'md:w-10'}`
+            }
          >
             <button
                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-               className="absolute top-1/2 -left-3 -translate-y-1/2 w-5 h-17 bg-gray-900 border border-gray-700 rounded-2xl flex items-center justify-center 
-               cursor-pointer hover:bg-gray-800 text-gray-400 hover:text-white shadow-[-5px_0_10px_rgba(0,0,0,0.5)] transition-colors z-50"
+               className={`absolute top-1/2 ${isSidebarOpen ? '-left-2' : '-left-6'} md:-left-3 -translate-y-1/2 w-8 h-20 md:w-5 md:h-17 bg-gray-900 border border-gray-700 ${isSidebarOpen ? 'rounded-r-2xl' : 'rounded-l-2xl'} md:rounded-2xl flex items-center justify-center 
+               cursor-pointer hover:bg-gray-800 text-gray-400 hover:text-white shadow-[-5px_0_10px_rgba(0,0,0,0.5)] transition-colors z-50`}
                title={isSidebarOpen ? "Recolher Sidebar" : "Expandir Sidebar"}
             >
                {/* Ícone Vertical (Setinha) */}
@@ -553,33 +559,64 @@ const CampaignContent = () => {
          </div>
 
          {/*JANELAS FLUTUANTES*/}
-         {openWindows.map((win) => (
-            <DraggableWindow
-               key={win.id}
-               title={win.title}
-               zIndex={win.zIndex}
-               onClose={() => closeWindow(win.id)}
-               onFocus={() => bringToFront(win.id)}
-               initialPos={{ x: 100 + (openWindows.length * 20), y: (openWindows.length * 20) - 8 }}
-            >
-               {win.data.type === 'doc' && (
-                  <DocumentEditor
-                     data={win.data}
-                     onUpdate={handleSheetUpdate}
-                  />
-               )}
+         {openWindows.map((win) => {
+            const windowContent = (
+               <>
+                  {win.data.type === 'doc' ? (
+                     <DocumentEditor
+                        data={win.data}
+                        onUpdate={handleSheetUpdate}
+                     />
+                  ) : (
+                     <SheetManager
+                        character={win.data}
+                        system="ordem-paranormal"
+                        onUpdate={handleSheetUpdate}
+                        onDelete={handleSheetDelete}
+                        campaignPlayers={activeCampaign?.players}
+                     />
+                  )}
+               </>
+            )
 
-               {(['pc', 'npc', 'structure'].includes(win.data.type) || !win.data.type) && (
-                  <SheetManager
-                     character={win.data}
-                     system="ordem-paranormal"
-                     onUpdate={handleSheetUpdate}
-                     onDelete={handleSheetDelete}
-                     campaignPlayers={activeCampaign?.players}
-                  />
-               )}
-            </DraggableWindow>
-         ))}
+            if (isMobile) {
+               return (
+                  <div
+                     key={win.id}
+                     className="fixed inset-0 z-100 bg-gray-950 flex flex-col animate-fade-in"
+                  >
+                     {/* Cabeçalho Mobile */}
+                     <div className="flex items-center justify-between p-4 bg-gray-900 border-b border-gray-800 shrink-0">
+                        <span className="font-bold text-gray-100 truncate pr-4">{win.title}</span>
+                        <button
+                           onClick={() => closeWindow(win.id)}
+                           className="p-2 bg-gray-800 rounded-full text-gray-400 hover:text-red-300 active:bg-gray-700"
+                        >
+                           <FaTimes size={20} />
+                        </button>
+                     </div>
+
+                     {/* Conteúdo com Scroll Nativo */}
+                     <div className="flex-1 overflow-y-auto custom-scrollbar">
+                        {windowContent}
+                     </div>
+                  </div>
+               )
+            }
+            return (
+               <DraggableWindow
+                  key={win.id}
+                  title={win.title}
+                  zIndex={win.zIndex}
+                  onClose={() => closeWindow(win.id)}
+                  onFocus={() => bringToFront(win.id)}
+                  initialPos={isMobile ? { x: 0, y: 0 } : { x: 100 + (openWindows.length * 20), y: (openWindows.length * 20) - 8 }}
+                  className={isMobile ? "fixed! inset-2! w-auto! h-auto! transform-none!" : ""}
+               >
+                  {windowContent}
+               </DraggableWindow>
+            )
+         })}
 
          {/*JANELAS MANEJAMENTO*/}
          {isSceneManagerOpen && (

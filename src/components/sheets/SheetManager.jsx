@@ -13,7 +13,7 @@ const SheetManager = ({ character, system, onUpdate, campaignPlayers, onDelete }
    // Escolhe o componente ou usa o default
    const SelectedSheet = SHEETS[systemKey] || SHEETS['default']
 
-   return <SelectedSheet data={character} onUpdate={onUpdate} campaignPlayers={campaignPlayers} onDelete={onDelete}/>
+   return <SelectedSheet data={character} onUpdate={onUpdate} campaignPlayers={campaignPlayers} onDelete={onDelete} />
 }
 
 export default SheetManager

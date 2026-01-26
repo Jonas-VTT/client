@@ -96,6 +96,10 @@ const ElementImage = memo(({
             e.cancelBubble = true
             if (onSelect) onSelect()
          }}
+         onTap={(e) => {
+            e.cancelBubble = true
+            if (onSelect) onSelect()
+         }}
       />
    )
 })
@@ -133,7 +137,6 @@ const ElementHUD = memo(({ element, position, onDelete, onToggleVisibility, sock
 
       const fetchChar = async () => {
          if (isMounted) {
-            console.log('fetch')
             if (!element.linkedCharacterId) {
                setLoading(false)
                return
@@ -682,6 +685,8 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
    const lastMousePos = useRef({ x: 0, y: 0 })
    const targetView = useRef({ x: 0, y: 0, scale: 1 })
    const positionRef = useRef({ x: 0, y: 0 })
+
+   const lastDist = useRef(0)
 
    const [selectedIds, setSelectedIds] = useState([])
    const [scale, setScale] = useState(1)
@@ -1374,6 +1379,101 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
          }
       }
    }
+
+   const getCenter = (p1, p2) => {
+      return {
+         x: (p1.clientX + p2.clientX) / 2,
+         y: (p1.clientY + p2.clientY) / 2,
+      }
+   }
+   const getDistance = (p1, p2) => {
+      return Math.sqrt(Math.pow(p2.clientX - p1.clientX, 2) + Math.pow(p2.clientY - p1.clientY, 2))
+   }
+   const handleTouchStart = (e) => {
+      e.evt.preventDefault() // Impede que a tela do navegador role junto
+      checkDeselect(e)
+
+      const touch1 = e.evt.touches[0]
+      const touch2 = e.evt.touches[1]
+
+      if (touch1 && touch2) {
+         // Iniciou Pinça (2 dedos)
+         isPanning.current = true
+         lastDist.current = getDistance(touch1, touch2)
+         lastMousePos.current = getCenter(touch1, touch2)
+      } else if (touch1) {
+         // Toque Simples (1 dedo no fundo) = Pan
+         const clickedOnEmpty = e.target === e.target.getStage()
+         if (clickedOnEmpty) {
+            isPanning.current = true
+            lastMousePos.current = { x: touch1.clientX, y: touch1.clientY }
+         }
+      }
+   }
+   const handleTouchMove = (e) => {
+      e.evt.preventDefault()
+      const stage = stageRef.current
+      const touch1 = e.evt.touches[0]
+      const touch2 = e.evt.touches[1]
+
+      if (touch1 && touch2) {
+         // --- ZOOM PINÇA (2 DEDOS) ---
+         if (isViewLocked && !isMaster) return
+
+         const dist = getDistance(touch1, touch2)
+         const point = getCenter(touch1, touch2)
+
+         if (!lastDist.current) lastDist.current = dist
+
+         const oldScale = stage.scaleX()
+         let newScale = oldScale * (dist / lastDist.current)
+         newScale = Math.max(0.1, Math.min(newScale, 5)) // Limites do Zoom
+
+         // Matemática para dar zoom no centro dos dedos
+         const mousePointTo = {
+            x: (point.x - stage.x()) / oldScale,
+            y: (point.y - stage.y()) / oldScale,
+         }
+
+         const newPos = {
+            x: point.x - mousePointTo.x * newScale,
+            y: point.y - mousePointTo.y * newScale,
+         }
+
+         const clampedPos = clampPosition(newPos.x, newPos.y, newScale)
+
+         setScale(newScale)
+         setPosition(clampedPos)
+         positionRef.current = clampedPos
+         lastDist.current = dist
+         lastMousePos.current = point
+
+         if (isSyncing) broadcastView(clampedPos, newScale)
+         updateMenuPosition()
+      }
+      else if (touch1 && isPanning.current) {
+         // --- ARRASTAR SIMPLES (1 DEDO) ---
+         if (isViewLocked) return
+
+         const dx = touch1.clientX - lastMousePos.current.x
+         const dy = touch1.clientY - lastMousePos.current.y
+
+         const attemptedX = positionRef.current.x + dx
+         const attemptedY = positionRef.current.y + dy
+         const newPos = clampPosition(attemptedX, attemptedY, scale)
+
+         positionRef.current = newPos
+         setPosition(newPos)
+         lastMousePos.current = { x: touch1.clientX, y: touch1.clientY }
+
+         if (isSyncing) broadcastView(newPos, scale)
+         updateMenuPosition()
+      }
+   }
+   const handleTouchEnd = () => {
+      isPanning.current = false
+      lastDist.current = 0
+   }
    //#endregion
 
    //#region --------- GERENCIAMENTO DE DADOS E RENDERIZAÇÃO ---------
@@ -1593,38 +1693,31 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
 
       intersects.sort((a, b) => a.angle - b.angle)
 
-      setTimeout(() => {
-         setDebugVisionPoints(intersects)
-      }, 0)
-
       return intersects.flatMap(p => [p.x, p.y])
    }
    useEffect(() => {
-      const timer = setTimeout(() => {
-         if (!isFogEnabled) {
-            setFogShapes([])
-            return
-         }
+      if (!isFogEnabled) {
+         setFogShapes([])
+         return
+      }
 
-         const newShapes = tokenElements.map(token => {
-            if (token.visible === false) return null
-            if (!checkIsMyToken(token)) return null
+      const newShapes = tokenElements.map(token => {
+         if (token.visible === false) return null
+         if (!checkIsMyToken(token)) return null
 
-            const points = calculateSightPolygon(token.x, token.y)
-            return (
-               <Line
-                  key={`vision-${token.id}`}
-                  points={points}
-                  closed={true}
-                  fill="white"
-                  listening={false}
-               />
-            )
-         })
-         setFogShapes(newShapes);
-      }, 0)
+         const points = calculateSightPolygon(token.x, token.y)
+         return (
+            <Line
+               key={`vision-${token.id}`}
+               points={points}
+               closed={true}
+               fill="white"
+               listening={false}
+            />
+         )
+      })
 
-      return () => clearTimeout(timer)
+      setFogShapes(newShapes)
    }, [tokenElements, isFogEnabled, wallSegments, myCharacters, user])
    //#endregion
 
@@ -1746,6 +1839,10 @@ const MapStage = ({ activeScene, isMaster, onUpdateScene, isSidebarOpen, activeT
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
+
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
          >
             {/* CAMADA DO MAPA  */}
             <Layer>

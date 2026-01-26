@@ -36,7 +36,7 @@ const AutoSaveTextarea = ({ value, onSave, className, placeholder }) => {
    }, [value])
 
    const handleChange = (e) => setLocalValue(e.target.value)
-   
+
    const handleBlur = () => {
       // Só chama a API se o valor realmente mudou
       if (localValue !== value) {
@@ -994,7 +994,7 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
          </div>
 
          {/* --- NAVEGAÇÃO DE ABAS --- */}
-         <nav className="flex px-2 bg-white/5 border-b border-gray-800 gap-1 pt-2">
+         <nav className="flex px-2 bg-white/5 border-b border-gray-800 gap-1 pt-2 overflow-x-auto no-scrollbar">
             {['principal', 'pericias', 'habilidades', 'inventario', 'rituais', 'detalhes', 'config', 'debug']
                .filter(t => {
                   if (t === 'config') return isOwner
@@ -1020,10 +1020,10 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
 
             {/* ================= PRINCIPAL ================= */}
             {tab === 'principal' && (
-               <div className="flex items-center gap-5 animate-fade-in">
+               <div className="flex flex-col md:flex-row items-center md:gap-5 animate-fade-in">
 
                   {/* ATRIBUTOS */}
-                  <div className="relative w-full max-w-[350px] mx-auto aspect-square select-none">
+                  <div className="hidden md:block relative w-full max-w-[350px] mx-auto aspect-square select-none">
                      <img
                         src={AtributosImage}
                         alt="Pentagrama de Atributos"
@@ -1054,6 +1054,19 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
                         top="76%" left="70%"
                         onSave={(val) => handleUpdate('sheet.atributos.vigor', Number(val))}
                      />
+                  </div>
+                  <div className="md:hidden flex justify-between gap-2 overflow-x-auto pb-2 px-1">
+                     {['agilidade', 'forca', 'intelecto', 'presenca', 'vigor'].map(attr => (
+                        <div key={attr} className="flex flex-col items-center bg-white/5 p-2 rounded border border-white/10 min-w-[60px]">
+                           <span className="text-[10px] uppercase font-bold text-gray-500 mb-1">{attr.substring(0, 3)}</span>
+                           <EditableInput
+                              value={sheet.atributos[attr]}
+                              type="number"
+                              onSave={v => handleUpdate(`sheet.atributos.${attr}`, Number(v))}
+                              className="text-2xl font-black text-white text-center w-full bg-transparent"
+                           />
+                        </div>
+                     ))}
                   </div>
 
                   <div className='w-full space-y-4'>
