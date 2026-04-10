@@ -389,6 +389,7 @@ const ElementsGroup = React.memo(({
                onSelect={() => onSelectElement(element.id)}
                isInteractive={allowInteract && isMaster}
                gridSize={gridSize}
+               onDragEnd={(e) => onDragEnd(e, element)}
             />
          )
       }
@@ -402,6 +403,7 @@ const ElementsGroup = React.memo(({
                onSelect={() => onSelectElement(element.id)}
                isInteractive={allowInteract && isMaster}
                gridSize={gridSize}
+               onDragEnd={(e) => onDragEnd(e, element)}
             />
          )
       }
@@ -516,7 +518,7 @@ const DRAWING_CONFIG = {
       forceStrokeWidth: false
    }
 }
-const FloorShape = ({ element, isSelected, onSelect, isInteractive, gridSize = 70 }) => {
+const FloorShape = ({ element, isSelected, onSelect, isInteractive, onDragEnd, gridSize = 70 }) => {
    const [pattern] = useImage(element.src)
 
    const patternScale = useMemo(() => {
@@ -557,6 +559,9 @@ const FloorShape = ({ element, isSelected, onSelect, isInteractive, gridSize = 7
          e.target.moveToTop()
          onSelect()
       },
+      onDragEnd: (e) => {
+         if (onDragEnd) onDragEnd(e)
+      }
    }
 
    if (element.shapeType === 'rect') {
@@ -580,7 +585,7 @@ const FloorShape = ({ element, isSelected, onSelect, isInteractive, gridSize = 7
 
    return null
 }
-const WallShape = ({ element, isSelected, onSelect, isInteractive, gridSize = 70 }) => {
+const WallShape = ({ element, isSelected, onSelect, isInteractive, onDragEnd, gridSize = 70 }) => {
    const [pattern] = useImage(element.src)
    const radius = 20 / 2
    const convertedPoints = useMemo(() => {
@@ -624,6 +629,9 @@ const WallShape = ({ element, isSelected, onSelect, isInteractive, gridSize = 70
       onDragStart: (e) => {
          e.target.moveToTop()
          onSelect()
+      },
+      onDragEnd: (e) => {
+         if (onDragEnd) onDragEnd(e)
       }
    }
 

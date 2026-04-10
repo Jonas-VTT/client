@@ -5,7 +5,7 @@ import api from '../../config/api'
 import { MdKeyboardArrowLeft, MdKeyboardArrowRight, MdKeyboardDoubleArrowLeft, MdKeyboardDoubleArrowRight } from "react-icons/md";
 import {
    FaHeart, FaBrain, FaRunning, FaBug, FaSave, FaTrash, FaPlus, FaChevronUp, FaChevronDown, FaFilter, FaEdit, FaCheck, FaTimes, FaBox, FaSkull,
-   FaWeightHanging, FaCamera, FaCog, FaUserPlus, FaUserTimes
+   FaWeightHanging, FaCamera, FaCog, FaUserPlus, FaUserTimes, FaDiceD20
 } from 'react-icons/fa'
 import {
    GiPsychicWaves, GiPistolGun, GiBullets, GiArmorVest, GiBackpack, GiBroadsword, GiCrosshair, GiHealthPotion, GiBookCover, GiHeavyLightning,
@@ -16,19 +16,37 @@ import { LuShield, LuSword } from "react-icons/lu"
 
 import EditableInput from '../EditableInput'
 
-const AttrValue = ({ value, top, left, onSave }) => (
-   <div
-      className="absolute w-12 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center z-10"
-      style={{ top: top, left: left }}
-   >
-      <EditableInput
-         value={value}
-         type='number'
-         onSave={onSave}
-         className="text-3xl md:text-4xl font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] text-center w-full"
-      />
-   </div>
-)
+const AttrValue = ({ value, top, left, onSave, onRoll, label }) => {
+   const handleRoll = () => {
+      if (!onRoll) return
+      const dados = Number(value)
+      // Regra de Ordem: 0 = 2d20kl1 (pega menor), >0 = Nd20kh1 (pega maior)
+      const formula = dados > 0 ? `${dados}d20kh1` : `2d20kl1`
+      onRoll(formula, `Teste de ${label}`)
+   }
+
+   return (
+      <div
+         className="absolute w-12 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center z-10"
+         style={{ top: top, left: left }}
+      >
+         <button
+            onClick={handleRoll}
+            className="absolute -top-4 opacity-0 group-hover:opacity-100 transition-opacity text-purple-400 bg-black/80 rounded-full p-1 z-20 hover:scale-110"
+            title={`Rolar ${label}`}
+         >
+            <FaDiceD20 size={12} />
+         </button>
+
+         <EditableInput
+            value={value}
+            type='number'
+            onSave={onSave}
+            className="text-3xl md:text-4xl font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] text-center w-full"
+         />
+      </div>
+   )
+}
 const AutoSaveTextarea = ({ value, onSave, className, placeholder }) => {
    const [localValue, setLocalValue] = useState(value || '')
    useEffect(() => {
@@ -192,7 +210,7 @@ const AbilityCard = ({ habilidade, index, allAbilities, onUpdate }) => {
       </div>
    )
 }
-const InventoryItemCard = ({ item, allItems, onUpdate, onEdit }) => {
+const InventoryItemCard = ({ item, allItems, onUpdate, onEdit, onRoll, characterName }) => {
    const [isOpen, setIsOpen] = useState(false)
 
    const toggleEquip = (e) => {
@@ -207,7 +225,14 @@ const InventoryItemCard = ({ item, allItems, onUpdate, onEdit }) => {
       onUpdate(newList)
    }
 
-   // Ícone baseado no tipo
+   const rollDamage = (e) => {
+      e.stopPropagation()
+      if (onRoll && item.dano) {
+         // Crítico e multiplicador poderiam ser complexos, vamos rolar o dano base
+         onRoll(item.dano, `${characterName} (Dano ${item.nome})`)
+      }
+   }
+
    const TypeIcon = ITEM_TYPES.find(t => t.id === item.tipo)?.icon || <FaBox />
 
    return (
@@ -238,6 +263,15 @@ const InventoryItemCard = ({ item, allItems, onUpdate, onEdit }) => {
 
             {/* Ações Rápidas */}
             <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+               {item.tipo === 'arma' && (
+                  <button
+                     onClick={rollDamage}
+                     className="text-red-400 hover:text-red-300 p-1"
+                     title={`Rolar Dano: ${item.dano}`}
+                  >
+                     <FaDiceD20 />
+                  </button>
+               )}
 
                {/* Checkbox Equipar (Só para armas e proteção) */}
                {(item.tipo === 'arma' || item.tipo === 'protecao') && (
@@ -781,7 +815,7 @@ const CIRCULOS = [1, 2, 3, 4]
 import AtributosImage from '../../assets/images/sheets/OrdemParanormal/atributos.png'
 
 
-const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }) => {
+const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete, onRoll }) => {
    const [character, setCharacter] = useState(data)
    const [tab, setTab] = useState('principal')
    const { user } = useContext(AuthContext)
@@ -1033,26 +1067,36 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
                         value={sheet.atributos.agilidade}
                         top="16%" left="50%"
                         onSave={(val) => handleUpdate('sheet.atributos.agilidade', Number(val))}
+                        label="Agilidade"
+                        onRoll={onRoll}
                      />
                      <AttrValue
                         value={sheet.atributos.forca}
                         top="38%" left="18%"
                         onSave={(val) => handleUpdate('sheet.atributos.forca', Number(val))}
+                        label="Força"
+                        onRoll={onRoll}
                      />
                      <AttrValue
                         value={sheet.atributos.intelecto}
                         top="38%" left="82%"
                         onSave={(val) => handleUpdate('sheet.atributos.intelecto', Number(val))}
+                        label="Intelecto"
+                        onRoll={onRoll}
                      />
                      <AttrValue
                         value={sheet.atributos.presenca}
                         top="76%" left="28%"
                         onSave={(val) => handleUpdate('sheet.atributos.presenca', Number(val))}
+                        label="Presença"
+                        onRoll={onRoll}
                      />
                      <AttrValue
                         value={sheet.atributos.vigor}
                         top="76%" left="70%"
                         onSave={(val) => handleUpdate('sheet.atributos.vigor', Number(val))}
+                        label="Vigor"
+                        onRoll={onRoll}
                      />
                   </div>
                   <div className="md:hidden flex justify-between gap-2 overflow-x-auto pb-2 px-1">
@@ -1372,7 +1416,8 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
 
                            {/* Lista de Perícias */}
                            <div className="grid gap-1">
-                              <div className="grid grid-cols-12 text-[9px] uppercase font-bold text-gray-600 px-2">
+                              <div className="grid grid-cols-13 text-[9px] uppercase font-bold text-gray-600 px-2">
+                                 <div className="col-span-1"></div>
                                  <div className="col-span-4">Perícia</div>
                                  <div className="col-span-2 text-center">Atributo</div>
                                  <div className="col-span-1 text-center">Treino</div>
@@ -1401,7 +1446,22 @@ const OrdemParanormalSheet = ({ data, onUpdate, campaignPlayers = [], onDelete }
                                  }
 
                                  return (
-                                    <div key={nome} className="grid grid-cols-12 items-center bg-[#1c1c1e] hover:bg-gray-800 p-2 rounded border border-transparent hover:border-gray-700 transition-colors group">
+                                    <div key={nome} className="grid grid-cols-13 items-center bg-[#1c1c1e] hover:bg-gray-800 p-2 rounded border border-transparent hover:border-gray-700 transition-colors group">
+                                       {/* BOTÃO ROLAR PERÍCIA */}
+                                       <button
+                                          onClick={() => {
+                                             if (onRoll) {
+                                                const attrVal = sheet.atributos[atributoUsado] || 0
+                                                const dados = attrVal > 0 ? `${attrVal}d20kh1` : `2d20kl1`
+                                                const formula = `${dados} + ${totalBonus}`
+                                                onRoll(formula, `${character.name} (${nome})`)
+                                             }
+                                          }}
+                                          className="col-span-1 flex justify-center opacity-0 group-hover:opacity-100 hover:scale-103 transition-all"
+                                          title="Rolar Perícia"
+                                       >
+                                          <FaDiceD20 size={20}/>
+                                       </button>
 
                                        {/* Nome e Seletor de Grau */}
                                        <div className="col-span-4 flex flex-col overflow-hidden">
