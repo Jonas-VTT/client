@@ -1,7 +1,7 @@
 import OrdemSheet from './OrdemParanormalSheet'
 import SimpleSheet from './SimpleSheet'
 
-const SheetManager = ({ character, system, onUpdate, campaignPlayers, onDelete }) => {
+const SheetManager = ({ character, system, onUpdate, campaignPlayers, onDelete, onRoll }) => {
 
    const systemKey = system ? system.toLowerCase().replace(/ /g, '-') : 'default'
 
@@ -13,7 +13,13 @@ const SheetManager = ({ character, system, onUpdate, campaignPlayers, onDelete }
    // Escolhe o componente ou usa o default
    const SelectedSheet = SHEETS[systemKey] || SHEETS['default']
 
-   return <SelectedSheet data={character} onUpdate={onUpdate} campaignPlayers={campaignPlayers} onDelete={onDelete} />
+   return <SelectedSheet 
+      data={character} 
+      onUpdate={onUpdate} 
+      campaignPlayers={campaignPlayers} 
+      onDelete={onDelete} 
+      onRoll={onRoll}
+   />
 }
 
 export default SheetManager

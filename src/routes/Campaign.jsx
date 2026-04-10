@@ -2,6 +2,7 @@
 import { useEffect, useState, useContext, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { io } from 'socket.io-client'
+import { DiceRoll } from '@dice-roller/rpg-dice-roller'
 
 // --- Config & Context ---
 import api from '../config/api'
@@ -17,6 +18,7 @@ import SceneManager from '../components/scenes/SceneManager'
 // --- UI & Tools ---
 import Toolbar from '../components/Toolbar'
 import LayerSidebar from '../components/LayerSidebar'
+import ChatTab from '../components/sidebar/ChatTab'
 import LibraryTab from '../components/sidebar/LibraryTab'
 import AssetBrowser from '../components/assets/AssetBrowser'
 
@@ -371,6 +373,34 @@ const CampaignContent = () => {
          setActiveCampaign(prev => ({ ...prev, activeScene: updatedScene }))
       } catch (error) { console.error("Erro ao transmitir cena:", error) }
    }
+   const handleGlobalRoll = (formula, characterName = 'Sistema') => {
+      if (!socket) return
+
+      const senderName = characterName || user.name || 'Anônimo'
+
+      try {
+         const roll = new DiceRoll(formula)
+
+         const messageData = {
+            campaignId,
+            sender: senderName,
+               type: 'roll',
+            content: {
+               formula: formula,
+               total: roll.total,
+               output: roll.output
+            },
+            timestamp: new Date()
+         }
+
+         socket.emit('send_message', messageData)
+         if(!isSidebarOpen) setIsSidebarOpen(true)
+         setActiveTab('chat')
+      }
+      catch (e) {
+         console.error("Erro no dado:", e)
+      }
+   }
 
    return (
       <div className='relative bg-gray-950 w-screen h-screen flex overflow-hidden'>
@@ -446,7 +476,7 @@ const CampaignContent = () => {
          {/*SIDEBAR*/}
          <div
             className={
-               `bg-black h-full flex flex-col text-white top-0 right-0 border-l border-gray-800 shadow-xl transition-all z-40
+               `bg-black flex flex-col text-white top-0 right-0 border-l border-gray-800 shadow-xl transition-all z-40
                fixed backdrop-blur-sm ${isSidebarOpen ? 'w-full' : 'w-0'}
                md:relative md:backdrop-blur-none ${isSidebarOpen ? 'md:w-120' : 'md:w-10'}`
             }
@@ -464,7 +494,7 @@ const CampaignContent = () => {
             </button>
 
             {isSidebarOpen && (
-               <div>
+               <div className='flex flex-col h-full'>
                   <div className='flex justify-between border-b border-gray-800'>
                      <button
                         onClick={() => setActiveTab('chat')}
@@ -489,10 +519,15 @@ const CampaignContent = () => {
                      </button>
                   </div>
 
-                  <div className='flex-1 overflow-y-auto custom-scrollbar'>
+                  <div className={`flex-1 ${activeTab === 'chat' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
                      {activeTab === 'chat' && (
-                        <div className="text-gray-500 text-center mt-10">
-                           Chat desconectado.
+                        <div className="h-full text-gray-500 text-center">
+                           <ChatTab
+                              socket={socket}
+                              campaignId={campaignId}
+                              user={user}
+                              isMaster={isMaster}
+                           />
                         </div>
                      )}
 
@@ -574,6 +609,7 @@ const CampaignContent = () => {
                         onUpdate={handleSheetUpdate}
                         onDelete={handleSheetDelete}
                         campaignPlayers={activeCampaign?.players}
+                        onRoll={handleGlobalRoll}
                      />
                   )}
                </>
