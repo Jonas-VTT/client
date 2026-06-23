@@ -92,7 +92,7 @@ const CampaignContent = () => {
       setActiveTool('select')
    }, [viewingScene])
    useEffect(() => {
-      const baseUrl = import.meta.env.DEV ? 'http://localhost:3000' : window.location.origin
+      const baseUrl = import.meta.env.DEV ? 'http://localhost:5000' : import.meta.env.VITE_API_URL.replace('/api', '')
 
       const newSocket = io(baseUrl, {
          transports: ['websocket', 'polling'],
